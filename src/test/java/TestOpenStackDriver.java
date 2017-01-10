@@ -17,19 +17,16 @@
 import org.openbaton.catalogue.nfvo.VimInstance;
 import org.openbaton.drivers.openstack4j.OpenStack4JDriver;
 
-/**
- * Created by gca on 10/01/17.
- */
+/** Created by gca on 10/01/17. */
 public class TestOpenStackDriver {
-    public static void main(String[] args) {
+  public static void main(String[] args) {
 
-        OpenStack4JDriver osd = new OpenStack4JDriver();
-        VimInstance vimInstance = new VimInstance();
-        vimInstance.setName("test");
-        vimInstance.setAuthUrl("");
-        vimInstance.setUsername("");
-        vimInstance.setPassword("test");
-        osd.authenticate(vimInstance);
-
-    }
+    OpenStack4JDriver osd = new OpenStack4JDriver();
+    VimInstance vimInstance = new VimInstance();
+    vimInstance.setName("test");
+    vimInstance.setAuthUrl("");
+    vimInstance.setUsername("");
+    vimInstance.setPassword("test");
+    osd.authenticate(vimInstance);
+  }
 }
