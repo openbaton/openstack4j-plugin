@@ -16,15 +16,6 @@
 
 package org.openbaton.drivers.openstack4j;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -38,10 +29,21 @@ import org.openbaton.plugin.PluginStarter;
 import org.openbaton.vim.drivers.interfaces.VimDriver;
 import org.openstack4j.api.OSClient.OSClientV3;
 import org.openstack4j.model.common.Identifier;
+import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -145,7 +147,21 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public List<Server> listServer(VimInstance vimInstance) throws VimDriverException {
-    return null;
+
+    List<Server> obServers = new ArrayList<>();
+    try {
+      OSClientV3 os = this.authenticate(vimInstance);
+
+      List<? extends org.openstack4j.model.compute.Server> servers = os.compute().servers().list();
+      for (org.openstack4j.model.compute.Server srv : servers){
+
+        obServers.add(Utils.getServer(srv));
+      }
+    } catch (Exception e) {
+      log.error(e.getMessage(), e);
+      throw new VimDriverException(e.getMessage());
+    }
+    return obServers;
   }
 
   @Override
@@ -195,7 +211,18 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public List<DeploymentFlavour> listFlavors(VimInstance vimInstance) throws VimDriverException {
-    return null;
+    List<DeploymentFlavour> deploymentFlavours = new ArrayList<>();
+    try {
+      OSClientV3 os = this.authenticate(vimInstance);
+      List<? extends Flavor> flavors = os.compute().flavors().list();
+      for (Flavor flavor : flavors) {
+        deploymentFlavours.add(Utils.getFlavor(flavor));
+      }
+    } catch (Exception e) {
+      log.error(e.getMessage(), e);
+      throw new VimDriverException(e.getMessage());
+    }
+    return deploymentFlavours;
   }
 
   @Override
