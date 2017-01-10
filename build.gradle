@@ -28,11 +28,12 @@ plugins {
 
 apply plugin: 'java'
 apply plugin: 'idea'
+apply plugin: 'eclipse'
+apply plugin: 'jacoco'
 
 apply from: 'gradle/gradle/nexus.upload.plugin.gradle'
 apply from: 'gradle/gradle/command.line.helper.gradle'
-apply from: 'gradle/gradle/git.release.gradle'
-
+apply from: 'gradle/gradle/git.helpers.gradle'
 
 /**
  * Project settings
@@ -66,6 +67,9 @@ project.ext {
     //------------------------------------------------//
 }
 
+apply from: 'gradle/gradle/application.java.gradle'
+apply from: 'gradle/gradle/run.application.java.gradle'
+apply from: 'gradle/gradle/git.release.gradle'
 
 repositories {
     mavenCentral()
@@ -81,7 +85,20 @@ dependencies {
     compile 'org.openbaton:exception:2.2.0'
     compile 'org.openbaton:plugin-sdk:2.2.0'
 
+    compile group: 'org.pacesys', name: 'openstack4j', version: '3.0.3'
 
+
+    // https://mvnrepository.com/artifact/commons-net/commons-net
+    compile group: 'commons-net', name: 'commons-net', version: '3.5'
+    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.4'
+
+    compile 'org.slf4j:slf4j-api:1.7.12'
+    compile 'org.slf4j:slf4j-simple:1.7.12'
+
+    testCompile("org.mockito:mockito-all:1.10.19")
+    testCompile("org.powermock:powermock-mockito-release-full:1.6.3")
+
+    testCompile("junit:junit:4.12")
 }
 
 
