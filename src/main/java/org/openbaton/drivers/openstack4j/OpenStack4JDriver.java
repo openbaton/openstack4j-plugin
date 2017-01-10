@@ -153,7 +153,7 @@ public class OpenStack4JDriver extends VimDriver {
       OSClientV3 os = this.authenticate(vimInstance);
 
       List<? extends org.openstack4j.model.compute.Server> servers = os.compute().servers().list();
-      for (org.openstack4j.model.compute.Server srv : servers){
+      for (org.openstack4j.model.compute.Server srv : servers) {
 
         obServers.add(Utils.getServer(srv));
       }
