@@ -33,12 +33,16 @@ import org.openstack4j.api.exceptions.AuthenticationException;
 import org.openstack4j.model.common.Identifier;
 import org.openstack4j.model.common.Payload;
 import org.openstack4j.model.common.Payloads;
+import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
+import org.openstack4j.model.compute.ServerCreate;
 import org.openstack4j.model.image.ContainerFormat;
 import org.openstack4j.model.image.DiskFormat;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.IPVersionType;
+import org.openstack4j.model.network.NetFloatingIP;
+import org.openstack4j.model.network.Port;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,11 +56,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
 
   private static Logger log = LoggerFactory.getLogger(OpenStack4JDriver.class);
+  private ReentrantLock lock;
 
   public OpenStack4JDriver() {
     super();
@@ -66,6 +72,7 @@ public class OpenStack4JDriver extends VimDriver {
   public void init() {
     String sslChecksDisabled = properties.getProperty("disable-ssl-certificate-checks", "false");
     log.debug("Disable SSL certificate checks: {}", sslChecksDisabled);
+    lock = new ReentrantLock();
   }
 
   public OSClientV3 authenticate(VimInstance vimInstance) throws VimDriverException {
@@ -123,8 +130,85 @@ public class OpenStack4JDriver extends VimDriver {
       Set<String> secGroup,
       String userData)
       throws VimDriverException {
-    return null;
+    Server server;
+    try {
+      OSClientV3 os = this.authenticate(vimInstance);
+      List<String> networks = new ArrayList<>(network);
+
+      // temporary workaround for getting first security group as it seems not supported adding multiple security groups
+      ServerCreate sc =
+          Builders.server()
+              .name(name)
+              .flavor(flavor)
+              .image(image)
+              .keypairName(keypair)
+              .networks(networks)
+              .userData(userData)
+              .build();
+
+      for (String sg : secGroup) {
+        sc.addSecurityGroup(sg);
+      }
+
+      log.debug(
+          "Keypair: "
+              + keypair
+              + ", SecGroup, "
+              + secGroup
+              + ", imageId: "
+              + image
+              + ", flavorId: "
+              + flavor
+              + ", networks: "
+              + network);
+      org.openstack4j.model.compute.Server server4j = os.compute().servers().boot(sc);
+      server = Utils.getServer(server4j);
+    } catch (Exception e) {
+      log.error(e.getMessage(), e);
+      throw new VimDriverException(e.getMessage());
+    }
+
+    return server;
   }
+
+  private List<String> listFloatingIps(VimInstance vimInstance) throws VimDriverException {
+    OSClientV3 os = this.authenticate(vimInstance);
+    List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
+    List<String> res = new ArrayList<>();
+    for (NetFloatingIP floatingIP : floatingIPs) {
+      if (floatingIP.getFixedIpAddress() == null || floatingIP.getFixedIpAddress().equals("")) {
+        res.add(floatingIP.getFloatingIpAddress());
+      }
+    }
+    return res;
+  }
+
+  //  private Server getNFVServer(org.openstack4j.model.compute.Server server) {
+  //    Server nfvServer = new Server();
+  //    nfvServer.setExtId(server.getId());
+  //    nfvServer.setName(server.getName());
+  //    nfvServer.setStatus(server.getStatus().toString());
+  //    HashMap<String, List<String>> privateIpMap = new HashMap<>();
+  //    HashMap<String, String> floatingIpMap = new HashMap<>();
+  //    server.getIps();
+  //
+  //    for(nfvServer)
+  //      for (String key : server.getAddresses().keys()) {
+  //        List<String> ips = new ArrayList<String>();
+  //        for (Address address : jcloudsServer.getAddresses().get(key)) {
+  //          String ip = address.getAddr();
+  //          if (allFloatingIps.contains(ip)) {
+  //            floatingIpMap.put(key, ip);
+  //          } else {
+  //            ips.add(ip);
+  //          }
+  //        }
+  //        privateIpMap.put(key, ips);
+  //      }
+  //
+  //
+  //    return nfvServer;
+  //  }
 
   @Override
   public List<NFVImage> listImages(VimInstance vimInstance) throws VimDriverException {
@@ -222,17 +306,136 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public Server launchInstanceAndWait(
       VimInstance vimInstance,
-      String hostname,
+      String name,
       String image,
-      String extId,
+      String flavor,
       String keyPair,
       Set<String> networks,
       Set<String> securityGroups,
-      String s,
+      String userdata,
       Map<String, String> floatingIps,
       Set<Key> keys)
       throws VimDriverException {
-    return null;
+
+    boolean bootCompleted = false;
+    if (keys != null && !keys.isEmpty()) {
+      userdata = addKeysToUserData(userdata, keys);
+    }
+    log.trace("Userdata: " + userdata);
+
+    Server server =
+        this.launchInstance(
+            vimInstance, name, image, flavor, keyPair, networks, securityGroups, userdata);
+
+    org.openstack4j.model.compute.Server server4j = null;
+    log.info(
+        "Deployed VM ( "
+            + server.getName()
+            + " ) with extId: "
+            + server.getExtId()
+            + " in status "
+            + server.getStatus());
+    while (!bootCompleted) {
+      log.debug("Waiting for VM with hostname: " + name + " to finish the launch");
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+      }
+      server4j = getServerById(vimInstance, server.getExtId());
+      server = Utils.getServer(server4j);
+      if (server.getStatus().equalsIgnoreCase("ACTIVE")) {
+        log.debug("Finished deployment of VM with hostname: " + name);
+        bootCompleted = true;
+      }
+      if (server.getStatus().equals("ERROR")) {
+        log.error("Failed to launch VM with hostname: " + name + " -> Went into ERROR");
+        VimDriverException vimDriverException = new VimDriverException(server.getExtendedStatus());
+        vimDriverException.setServer(server);
+        throw vimDriverException;
+      }
+    }
+    if (floatingIps != null && floatingIps.size() > 0) {
+      lock.lock(); // TODO chooseFloating ip is lock but association is parallel
+      log.debug("Assigning FloatingIPs to VM with hostname: " + name);
+      log.debug("FloatingIPs are: " + floatingIps);
+      int freeIps = listFloatingIps(vimInstance).size();
+      int ipsNeeded = floatingIps.size();
+      if (freeIps < ipsNeeded) {
+        log.error(
+            "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
+        log.debug("Getting the pool name of a floating ip pool");
+        String pool_name = getIpPoolName(vimInstance);
+        allocateFloatingIps(vimInstance, pool_name, ipsNeeded - freeIps);
+      }
+      if (listFloatingIps(vimInstance).size() >= floatingIps.size()) {
+        for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
+          associateFloatingIpToNetwork(vimInstance, server4j, fip);
+          log.info(
+              "Assigned FloatingIPs to VM with hostname: "
+                  + name
+                  + " -> FloatingIPs: "
+                  + server.getFloatingIps());
+        }
+      } else {
+        log.error(
+            "Cannot assign FloatingIPs to VM with hostname: " + name + ". No FloatingIPs left...");
+      }
+      lock.unlock();
+    }
+    return server;
+  }
+
+  private org.openstack4j.model.compute.Server getServerById(VimInstance vimInstance, String extId)
+      throws VimDriverException {
+    OSClientV3 os = authenticate(vimInstance);
+    return os.compute().servers().get(extId);
+  }
+
+  private void associateFloatingIpToNetwork(
+      VimInstance vimInstance,
+      org.openstack4j.model.compute.Server server4j,
+      Map.Entry<String, String> fip)
+      throws VimDriverException {
+    OSClientV3 os = authenticate(vimInstance);
+    for (Address privateIp : server4j.getAddresses().getAddresses().get(fip.getKey())) {
+      for (Port port : os.networking().port().list()) {
+        if (port.getMacAddress().equalsIgnoreCase(privateIp.getMacAddr())) {
+          os.networking()
+              .floatingip()
+              .associateToPort(findFloatingIpId(os, fip.getValue()), port.getId());
+          return;
+        }
+      }
+    }
+    throw new VimDriverException("Not able to associate fip " + fip);
+  }
+
+  private String findFloatingIpId(final OSClientV3 os, String fipValue) throws VimDriverException {
+    if (fipValue.trim().equalsIgnoreCase("random"))
+      return os.networking().floatingip().list().get(0).getId();
+    for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
+      if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
+        return floatingIP.getId();
+      }
+    }
+    throw new VimDriverException("Floating ip " + fipValue + " not found");
+  }
+
+  private void allocateFloatingIps(VimInstance vimInstance, String poolName, int numOfFip)
+      throws VimDriverException {
+    OSClientV3 os = authenticate(vimInstance);
+    for (int i = 0; i < numOfFip; i++) os.compute().floatingIps().allocateIP(poolName);
+  }
+
+  private String getIpPoolName(VimInstance vimInstance) throws VimDriverException {
+    OSClientV3 os = authenticate(vimInstance);
+    List<String> poolNames = os.compute().floatingIps().getPoolNames();
+    if (!poolNames.isEmpty()) {
+      //TODO select right pool!
+      return poolNames.get(0);
+    }
+    throw new VimDriverException("No pool of floating ips are available");
   }
 
   @Override
@@ -244,9 +447,39 @@ public class OpenStack4JDriver extends VimDriver {
       String keyPair,
       Set<String> networks,
       Set<String> securityGroups,
-      String s)
+      String userdata)
       throws VimDriverException {
-    return null;
+    return launchInstanceAndWait(
+        vimInstance,
+        hostname,
+        image,
+        extId,
+        keyPair,
+        networks,
+        securityGroups,
+        userdata,
+        null,
+        null);
+  }
+
+  private String addKeysToUserData(
+      String userData, Set<org.openbaton.catalogue.security.Key> keys) {
+    log.debug("Going to add all keys: " + keys.size());
+    userData += "\n";
+    userData += "for x in `find /home/ -name authorized_keys`; do\n";
+    //    String oldKeys = gson.toJson(keys);
+    //
+    //    Set<org.openbaton.catalogue.security.Key> keysSet =
+    //        new Gson()
+    //            .fromJson(
+    //                oldKeys, new TypeToken<Set<Key>>() {}.getType());
+
+    for (org.openbaton.catalogue.security.Key key : keys) {
+      log.debug("Adding key: " + key.getName());
+      userData += "\techo \"" + key.getPublicKey() + "\" >> $x\n";
+    }
+    userData += "done\n";
+    return userData;
   }
 
   @Override

@@ -36,6 +36,7 @@ class Utils {
     server.setExtId(srv.getId());
     server.setCreated(srv.getCreated());
     server.setExtendedStatus(srv.getStatus().value());
+    server.setStatus(srv.getStatus().value());
     server.setHostName(srv.getName()); // TODO which one is correct?
     server.setInstanceName(srv.getInstanceName());
     HashMap<String, List<String>> ips = new HashMap<>();
