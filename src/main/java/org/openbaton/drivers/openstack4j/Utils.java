@@ -1,10 +1,5 @@
 package org.openbaton.drivers.openstack4j;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -16,6 +11,12 @@ import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.Server;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.Subnet;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 
 /** Created by lto on 10/01/2017. */
 class Utils {

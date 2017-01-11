@@ -1,8 +1,5 @@
 package org.openbaton.drivers.openstack4j.test;
 
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.Properties;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
@@ -15,6 +12,12 @@ import org.openbaton.exceptions.VimDriverException;
 import org.openstack4j.api.OSClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Properties;
 
 /** Created by lto on 11/01/2017. */
 public class OpenStack4JDriverTest {
@@ -40,9 +43,9 @@ public class OpenStack4JDriverTest {
 
   @Test
   public void authenticate() throws VimDriverException {
-    OSClient.OSClientV3 os = osd.authenticate(vimInstance);
-    log.debug("Token is: " + os.getToken());
-    assert os.getToken() != null;
+    OSClient os = osd.authenticate(vimInstance);
+    log.debug("Endpoint is: " + os.getEndpoint());
+    assert os.getEndpoint() != null;
   }
 
   @Test
@@ -92,10 +95,29 @@ public class OpenStack4JDriverTest {
   }
 
   @Test
-  public void launchInstanceAndWait() throws VimDriverException {}
+  public void launchInstanceAndWait() throws VimDriverException {
 
-  @Test
-  public void launchInstanceAndWait1() throws VimDriverException {}
+    Server server =
+        osd.launchInstanceAndWait(
+            vimInstance,
+            "test",
+            properties.getProperty("vim.instance.image.name", "Ubuntu 14.04.4 x86_64"),
+            properties.getProperty("vim.instance.flavor.name", "m1.small"),
+            properties.getProperty("vim.instance.keypair.name", "stack"),
+            new HashSet<String>(
+                Arrays.asList(
+                    properties
+                        .getProperty("vim.instance.network.names", "mgmt;private")
+                        .split(";"))),
+            new HashSet<String>(
+                Arrays.asList(
+                    properties
+                        .getProperty("vim.instance.securitygroups.names", "default")
+                        .split(";"))),
+            null);
+
+    osd.deleteServerByIdAndWait(vimInstance, server.getExtId());
+  }
 
   @Test
   public void deleteServerByIdAndWait() throws VimDriverException {}
@@ -166,7 +188,9 @@ public class OpenStack4JDriverTest {
     vimInstance.setAuthUrl(properties.getProperty("vim.instance.url"));
     vimInstance.setUsername(properties.getProperty("vim.instance.username"));
     vimInstance.setPassword(properties.getProperty("vim.instance.password"));
-    vimInstance.setTenant(properties.getProperty("vim.instance.project.id"));
+    if (properties.getProperty("vim.instance.project.name") != null)
+      vimInstance.setTenant(properties.getProperty("vim.instance.project.name"));
+    else vimInstance.setTenant(properties.getProperty("vim.instance.project.id"));
     return vimInstance;
   }
 }
