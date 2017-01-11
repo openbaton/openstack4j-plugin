@@ -1,0 +1,7 @@
+# copy this file removing ".default" and putting the correct fields
+vim.instance.name = test
+vim.instance.username = test
+vim.instance.password = test
+vim.instance.url = http://127.0.0.1/identity/v3
+vim.instance.project.id = testid
+vim.instance.project.name = test

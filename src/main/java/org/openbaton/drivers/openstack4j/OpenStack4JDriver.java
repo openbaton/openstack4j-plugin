@@ -16,6 +16,14 @@
 
 package org.openbaton.drivers.openstack4j;
 
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -29,6 +37,7 @@ import org.openbaton.plugin.PluginStarter;
 import org.openbaton.vim.drivers.interfaces.VimDriver;
 import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient.OSClientV3;
+import org.openstack4j.api.exceptions.AuthenticationException;
 import org.openstack4j.model.common.Identifier;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.image.Image;
@@ -36,15 +45,6 @@ import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -67,13 +67,25 @@ public class OpenStack4JDriver extends VimDriver {
     //        }
   }
 
-  public OSClientV3 authenticate(VimInstance vimInstance) {
-    return OSFactory.builderV3()
-        .endpoint(vimInstance.getAuthUrl())
-        .credentials(
-            vimInstance.getUsername(), vimInstance.getPassword(), Identifier.byName("Default"))
-        .scopeToProject(Identifier.byName(vimInstance.getTenant()))
-        .authenticate();
+  public OSClientV3 authenticate(VimInstance vimInstance) throws VimDriverException {
+
+    Identifier domain = Identifier.byName("Default");
+    Identifier project = Identifier.byId(vimInstance.getTenant());
+
+    log.debug("Domain id: " + domain.getId());
+    log.debug("Project id: " + project.getId());
+
+    try {
+
+      return OSFactory.builderV3()
+          .endpoint(vimInstance.getAuthUrl())
+          .scopeToProject(project)
+          .credentials(vimInstance.getUsername(), vimInstance.getPassword(), domain)
+          .authenticate();
+
+    } catch (AuthenticationException e) {
+      throw new VimDriverException(e.getMessage(), e);
+    }
   }
 
   public static void main(String[] args)
