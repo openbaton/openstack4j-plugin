@@ -31,7 +31,11 @@ import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient.OSClientV3;
 import org.openstack4j.api.exceptions.AuthenticationException;
 import org.openstack4j.model.common.Identifier;
+import org.openstack4j.model.common.Payload;
+import org.openstack4j.model.common.Payloads;
 import org.openstack4j.model.compute.Flavor;
+import org.openstack4j.model.image.ContainerFormat;
+import org.openstack4j.model.image.DiskFormat;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.openstack.OSFactory;
@@ -40,6 +44,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -287,6 +293,7 @@ public class OpenStack4JDriver extends VimDriver {
     return Utils.getFlavor(flavor);
   }
 
+  //TODO need to chage byte[] to stream, at least...
   @Override
   public NFVImage addImage(VimInstance vimInstance, NFVImage image, byte[] imageFile)
       throws VimDriverException {
@@ -296,7 +303,28 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public NFVImage addImage(VimInstance vimInstance, NFVImage image, String image_url)
       throws VimDriverException {
-    return null;
+    OSClientV3 os = this.authenticate(vimInstance);
+    Payload<URL> payload;
+    try {
+      payload = Payloads.create(new URL(image_url));
+    } catch (MalformedURLException e) {
+      e.printStackTrace();
+      throw new VimDriverException(e.getMessage(), e);
+    }
+    Image image4j =
+        os.images()
+            .create(
+                Builders.image()
+                    .name(image.getName())
+                    .isPublic(image.isPublic())
+                    .containerFormat(
+                        ContainerFormat.value(image.getContainerFormat().toUpperCase()))
+                    .diskFormat(DiskFormat.value(image.getDiskFormat().toUpperCase()))
+                    .minDisk(image.getMinDiskSpace())
+                    .minRam(image.getMinRam())
+                    .build(),
+                payload);
+    return Utils.getImage(image4j);
   }
 
   @Override
