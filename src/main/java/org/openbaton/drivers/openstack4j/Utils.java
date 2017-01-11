@@ -13,9 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Created by lto on 10/01/2017.
- */
+/** Created by lto on 10/01/2017. */
 class Utils {
   static DeploymentFlavour getFlavor(Flavor flavor) {
     DeploymentFlavour flavour = new DeploymentFlavour();
@@ -37,7 +35,8 @@ class Utils {
     server.setHostName(srv.getName()); // TODO which one is correct?
     server.setInstanceName(srv.getInstanceName());
     HashMap<String, List<String>> ips = new HashMap<>();
-    for (Map.Entry<String, List<? extends Address>> address : srv.getAddresses().getAddresses().entrySet()) {
+    for (Map.Entry<String, List<? extends Address>> address :
+        srv.getAddresses().getAddresses().entrySet()) {
       List<String> adrs = new ArrayList<>();
       for (Address ip : address.getValue()) {
         adrs.add(ip.getAddr());
