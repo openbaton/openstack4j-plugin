@@ -16,14 +16,6 @@
 
 package org.openbaton.drivers.openstack4j;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -45,6 +37,15 @@ import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -269,7 +270,21 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public DeploymentFlavour addFlavor(VimInstance vimInstance, DeploymentFlavour deploymentFlavour)
       throws VimDriverException {
-    return null;
+    OSClientV3 os = this.authenticate(vimInstance);
+    //TODO add missing parameter to deployment flavor, hopefully fixed with etsi v2.1.1
+    Flavor flavor =
+        os.compute()
+            .flavors()
+            .create(
+                Builders.flavor()
+                    .name(deploymentFlavour.getFlavour_key())
+                    .disk(deploymentFlavour.getDisk())
+                    .isPublic(false)
+                    .ram(deploymentFlavour.getRam())
+                    .vcpus(deploymentFlavour.getVcpus())
+                    .build());
+
+    return Utils.getFlavor(flavor);
   }
 
   @Override

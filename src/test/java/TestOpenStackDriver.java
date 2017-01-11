@@ -20,6 +20,7 @@ import java.util.Properties;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.openbaton.catalogue.nfvo.NFVImage;
+import org.openbaton.catalogue.nfvo.Network;
 import org.openbaton.catalogue.nfvo.VimInstance;
 import org.openbaton.drivers.openstack4j.OpenStack4JDriver;
 import org.openbaton.exceptions.VimDriverException;
@@ -61,6 +62,17 @@ public class TestOpenStackDriver {
     try {
       for (NFVImage image : osd.listImages(vimInstance)) {
         log.info(image.toString());
+      }
+    } catch (VimDriverException e) {
+      e.printStackTrace();
+    }
+  }
+
+  @Test
+  public void testListNetwors() {
+    try {
+      for (Network network : osd.listNetworks(vimInstance)) {
+        log.info(network.toString());
       }
     } catch (VimDriverException e) {
       e.printStackTrace();
