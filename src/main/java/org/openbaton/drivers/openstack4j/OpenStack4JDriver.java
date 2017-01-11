@@ -245,6 +245,11 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public Network createNetwork(VimInstance vimInstance, Network network) throws VimDriverException {
+
+    OSClientV3 os = this.authenticate(vimInstance);
+    org.openstack4j.model.network.Network network4j = Utils.createNetwork(network);
+    os.networking().network().create(network4j);
+
     return null;
   }
 
@@ -324,7 +329,8 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public boolean deleteNetwork(VimInstance vimInstance, String extId) throws VimDriverException {
-    return false;
+    OSClientV3 os = this.authenticate(vimInstance);
+    return os.networking().network().delete(extId).isSuccess();
   }
 
   @Override

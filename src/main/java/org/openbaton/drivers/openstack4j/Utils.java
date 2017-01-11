@@ -1,17 +1,18 @@
 package org.openbaton.drivers.openstack4j;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
+import org.openbaton.catalogue.nfvo.Network;
+import org.openstack4j.api.Builders;
 import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.Server;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.Subnet;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /** Created by lto on 10/01/2017. */
 class Utils {
@@ -73,5 +74,13 @@ class Utils {
     nfvSubnet.setGatewayIp(subnet.getGateway());
     nfvSubnet.setNetworkId(subnet.getNetworkId());
     return nfvSubnet;
+  }
+
+  static org.openstack4j.model.network.Network createNetwork(Network network) {
+    return Builders.network()
+        .name(network.getName())
+        .adminStateUp(true)
+        .isShared(network.getShared())
+        .build();
   }
 }
