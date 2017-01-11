@@ -1,18 +1,21 @@
 package org.openbaton.drivers.openstack4j.test;
 
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.Properties;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
+import org.openbaton.catalogue.nfvo.Server;
 import org.openbaton.catalogue.nfvo.VimInstance;
 import org.openbaton.drivers.openstack4j.OpenStack4JDriver;
 import org.openbaton.exceptions.VimDriverException;
 import org.openstack4j.api.OSClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.Properties;
 
 /** Created by lto on 11/01/2017. */
 public class OpenStack4JDriverTest {
@@ -37,102 +40,119 @@ public class OpenStack4JDriverTest {
   }
 
   @Test
-  public void authenticate() throws Exception {
+  public void authenticate() throws VimDriverException {
     OSClient.OSClientV3 os = osd.authenticate(vimInstance);
     log.debug("Token is: " + os.getToken());
     assert os.getToken() != null;
   }
 
   @Test
-  public void launchInstance() throws Exception {}
+  public void launchInstance() throws VimDriverException {}
 
   @Test
-  public void listImages() throws Exception {
+  public void listImages() throws VimDriverException {
     try {
       for (NFVImage image : osd.listImages(vimInstance)) {
         log.info(image.toString());
       }
     } catch (VimDriverException e) {
       e.printStackTrace();
+      throw e;
     }
   }
 
   @Test
-  public void listServer() throws Exception {}
+  public void listServer() throws VimDriverException {
+    for (Server server : osd.listServer(vimInstance)) {
+      log.info(server.toString());
+    }
+  }
 
   @Test
-  public void listNetworks() throws Exception {
+  public void listNetworks() throws VimDriverException {
     try {
       for (Network network : osd.listNetworks(vimInstance)) {
         log.info(network.toString());
       }
     } catch (VimDriverException e) {
       e.printStackTrace();
+      throw e;
     }
   }
 
   @Test
-  public void listFlavors() throws Exception {}
+  public void listFlavors() throws VimDriverException {
+    try {
+      for (DeploymentFlavour flavour : osd.listFlavors(vimInstance)) {
+        log.info(flavour.toString());
+      }
+    } catch (VimDriverException e) {
+      e.printStackTrace();
+      throw e;
+    }
+  }
 
   @Test
-  public void launchInstanceAndWait() throws Exception {}
+  public void launchInstanceAndWait() throws VimDriverException {}
 
   @Test
-  public void launchInstanceAndWait1() throws Exception {}
+  public void launchInstanceAndWait1() throws VimDriverException {}
 
   @Test
-  public void deleteServerByIdAndWait() throws Exception {}
+  public void deleteServerByIdAndWait() throws VimDriverException {}
 
   @Test
-  public void createNetwork() throws Exception {}
+  public void createNetwork() throws VimDriverException {}
 
   @Test
-  public void addFlavor() throws Exception {}
+  public void addFlavor() throws VimDriverException {}
 
   @Test
-  public void addImage() throws Exception {}
+  public void addImage() throws VimDriverException {}
 
   @Test
-  public void addImage1() throws Exception {}
+  public void addImage1() throws VimDriverException {}
 
   @Test
-  public void updateImage() throws Exception {}
+  public void updateImage() throws VimDriverException {}
 
   @Test
-  public void copyImage() throws Exception {}
+  public void copyImage() throws VimDriverException {}
 
   @Test
-  public void deleteImage() throws Exception {}
+  public void deleteImage() throws VimDriverException {}
 
   @Test
-  public void updateFlavor() throws Exception {}
+  public void updateFlavor() throws VimDriverException {}
 
   @Test
-  public void deleteFlavor() throws Exception {}
+  public void deleteFlavor() throws VimDriverException {}
 
   @Test
-  public void createSubnet() throws Exception {}
+  public void createSubnet() throws VimDriverException {}
 
   @Test
-  public void updateNetwork() throws Exception {}
+  public void updateNetwork() throws VimDriverException {}
 
   @Test
-  public void updateSubnet() throws Exception {}
+  public void updateSubnet() throws VimDriverException {}
 
   @Test
-  public void getSubnetsExtIds() throws Exception {}
+  public void getSubnetsExtIds() throws VimDriverException {}
 
   @Test
-  public void deleteSubnet() throws Exception {}
+  public void deleteSubnet() throws VimDriverException {}
 
   @Test
-  public void deleteNetwork() throws Exception {}
+  public void deleteNetwork() throws VimDriverException {}
 
   @Test
-  public void getNetworkById() throws Exception {}
+  public void getNetworkById() throws VimDriverException {}
 
   @Test
-  public void getQuota() throws Exception {}
+  public void getQuota() throws VimDriverException {
+    log.info(osd.getQuota(vimInstance).toString());
+  }
 
   public static void main(String[] args) throws VimDriverException {
 
