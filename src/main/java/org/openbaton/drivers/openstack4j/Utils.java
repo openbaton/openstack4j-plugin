@@ -2,6 +2,7 @@ package org.openbaton.drivers.openstack4j;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
@@ -82,5 +83,13 @@ class Utils {
         .adminStateUp(true)
         .isShared(network.getShared())
         .build();
+  }
+
+  static Network getNetwork(org.openstack4j.model.network.Network network) {
+    Network nfvNetwork = new Network();
+    nfvNetwork.setName(network.getName());
+    nfvNetwork.setExtId(network.getId());
+    nfvNetwork.setSubnets(new HashSet<org.openbaton.catalogue.nfvo.Subnet>());
+    return nfvNetwork;
   }
 }

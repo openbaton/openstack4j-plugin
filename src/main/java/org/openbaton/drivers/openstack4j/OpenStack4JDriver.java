@@ -27,10 +27,12 @@ import org.openbaton.catalogue.security.Key;
 import org.openbaton.exceptions.VimDriverException;
 import org.openbaton.plugin.PluginStarter;
 import org.openbaton.vim.drivers.interfaces.VimDriver;
+import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient.OSClientV3;
 import org.openstack4j.model.common.Identifier;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.image.Image;
+import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +40,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -162,10 +163,7 @@ public class OpenStack4JDriver extends VimDriver {
           os.networking().network().list();
       List<Network> nfvNetworks = new ArrayList<>();
       for (org.openstack4j.model.network.Network network : networks) {
-        Network nfvNetwork = new Network();
-        nfvNetwork.setName(network.getName());
-        nfvNetwork.setExtId(network.getId());
-        nfvNetwork.setSubnets(new HashSet<Subnet>());
+        Network nfvNetwork = Utils.getNetwork(network);
         for (String subnetId : network.getSubnets()) {
           nfvNetwork.getSubnets().add(getSubnetById(os, vimInstance, subnetId));
         }
@@ -249,8 +247,11 @@ public class OpenStack4JDriver extends VimDriver {
     OSClientV3 os = this.authenticate(vimInstance);
     org.openstack4j.model.network.Network network4j = Utils.createNetwork(network);
     os.networking().network().create(network4j);
-
-    return null;
+    Network res = Utils.getNetwork(network4j);
+    for (Subnet subnet : network.getSubnets()) {
+      network.getSubnets().add(createSubnet(vimInstance, res, subnet));
+    }
+    return res;
   }
 
   @Override
@@ -301,7 +302,21 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public Subnet createSubnet(VimInstance vimInstance, Network createdNetwork, Subnet subnet)
       throws VimDriverException {
-    return null;
+    OSClientV3 os = this.authenticate(vimInstance);
+    org.openstack4j.model.network.Subnet subnet4j =
+        os.networking()
+            .subnet()
+            .create(
+                Builders.subnet()
+                    .name(subnet.getName())
+                    .networkId(subnet.getNetworkId())
+                    .ipVersion(IPVersionType.V4)
+                    .cidr(subnet.getCidr())
+                    .addDNSNameServer(properties.getProperty("openstack4j.dns.ip", "8.8.8.8"))
+                    .enableDHCP(true)
+                    .gateway(subnet.getGatewayIp())
+                    .build());
+    return Utils.getSubnet(subnet4j);
   }
 
   @Override
@@ -335,7 +350,8 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public Network getNetworkById(VimInstance vimInstance, String id) throws VimDriverException {
-    return null;
+    OSClientV3 os = this.authenticate(vimInstance);
+    return Utils.getNetwork(os.networking().network().get(id));
   }
 
   @Override
