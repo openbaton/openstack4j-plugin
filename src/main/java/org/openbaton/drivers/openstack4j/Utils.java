@@ -1,19 +1,23 @@
 package org.openbaton.drivers.openstack4j;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.Server;
 import org.openstack4j.model.image.Image;
+import org.openstack4j.model.network.Subnet;
 
-/** Created by lto on 10/01/2017. */
-public class Utils {
-  public static DeploymentFlavour getFlavor(Flavor flavor) {
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Created by lto on 10/01/2017.
+ */
+class Utils {
+  static DeploymentFlavour getFlavor(Flavor flavor) {
     DeploymentFlavour flavour = new DeploymentFlavour();
     DeploymentFlavour deploymentFlavour = new DeploymentFlavour();
     deploymentFlavour.setFlavour_key(flavor.getName());
@@ -24,7 +28,7 @@ public class Utils {
     return flavour;
   }
 
-  public static org.openbaton.catalogue.nfvo.Server getServer(Server srv) {
+  static org.openbaton.catalogue.nfvo.Server getServer(Server srv) {
     org.openbaton.catalogue.nfvo.Server server = new org.openbaton.catalogue.nfvo.Server();
     server.setName(srv.getName());
     server.setExtId(srv.getId());
@@ -33,8 +37,7 @@ public class Utils {
     server.setHostName(srv.getName()); // TODO which one is correct?
     server.setInstanceName(srv.getInstanceName());
     HashMap<String, List<String>> ips = new HashMap<>();
-    for (Map.Entry<String, List<? extends Address>> address :
-        srv.getAddresses().getAddresses().entrySet()) {
+    for (Map.Entry<String, List<? extends Address>> address : srv.getAddresses().getAddresses().entrySet()) {
       List<String> adrs = new ArrayList<>();
       for (Address ip : address.getValue()) {
         adrs.add(ip.getAddr());
@@ -49,7 +52,7 @@ public class Utils {
     return server;
   }
 
-  public static NFVImage getImage(Image image) {
+  static NFVImage getImage(Image image) {
     NFVImage nfvImage = new NFVImage();
     nfvImage.setName(image.getName());
     nfvImage.setExtId(image.getId());
@@ -61,5 +64,15 @@ public class Utils {
     nfvImage.setDiskFormat(image.getDiskFormat().toString().toUpperCase());
     nfvImage.setContainerFormat(image.getContainerFormat().toString().toUpperCase());
     return nfvImage;
+  }
+
+  static org.openbaton.catalogue.nfvo.Subnet getSubnet(Subnet subnet) {
+    org.openbaton.catalogue.nfvo.Subnet nfvSubnet = new org.openbaton.catalogue.nfvo.Subnet();
+    nfvSubnet.setExtId(subnet.getId());
+    nfvSubnet.setName(subnet.getName());
+    nfvSubnet.setCidr(subnet.getCidr());
+    nfvSubnet.setGatewayIp(subnet.getGateway());
+    nfvSubnet.setNetworkId(subnet.getNetworkId());
+    return nfvSubnet;
   }
 }

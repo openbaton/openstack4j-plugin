@@ -16,15 +16,6 @@
 
 package org.openbaton.drivers.openstack4j;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -43,6 +34,16 @@ import org.openstack4j.model.image.Image;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -185,13 +186,7 @@ public class OpenStack4JDriver extends VimDriver {
             + vimInstance.getName());
     try {
       org.openstack4j.model.network.Subnet subnet = os.networking().subnet().get(subnetId);
-      Subnet nfvSubnet = new Subnet();
-      nfvSubnet.setExtId(subnet.getId());
-      nfvSubnet.setName(subnet.getName());
-      nfvSubnet.setCidr(subnet.getCidr());
-      nfvSubnet.setGatewayIp(subnet.getGateway());
-      nfvSubnet.setNetworkId(subnet.getNetworkId());
-      return nfvSubnet;
+      return Utils.getSubnet(subnet);
     } catch (Exception e) {
       log.error(e.getMessage(), e);
       throw new VimDriverException(e.getMessage());
