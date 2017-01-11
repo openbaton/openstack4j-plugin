@@ -1,18 +1,4 @@
-/*
- * Copyright (c) 2017 Open Baton (http://www.openbaton.org)
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+package org.openbaton.drivers.openstack4j.test;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -28,11 +14,10 @@ import org.openstack4j.api.OSClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Created by gca on 10/01/17. */
-public class TestOpenStackDriver {
-
+/** Created by lto on 11/01/2017. */
+public class OpenStack4JDriverTest {
   private static Properties properties;
-  private static Logger log = LoggerFactory.getLogger(TestOpenStackDriver.class);
+  private static Logger log = LoggerFactory.getLogger(OpenStack4JDriverTest.class);
   private static OpenStack4JDriver osd;
   private static VimInstance vimInstance;
 
@@ -41,7 +26,8 @@ public class TestOpenStackDriver {
     properties = new Properties();
     try {
       properties.load(
-          new InputStreamReader(TestOpenStackDriver.class.getResourceAsStream("/test.properties")));
+          new InputStreamReader(
+              OpenStack4JDriverTest.class.getResourceAsStream("/test.properties")));
     } catch (IOException e) {
       log.error("Missing test.properties file");
       throw e;
@@ -51,14 +37,17 @@ public class TestOpenStackDriver {
   }
 
   @Test
-  public void testAuthenticate() throws VimDriverException {
+  public void authenticate() throws Exception {
     OSClient.OSClientV3 os = osd.authenticate(vimInstance);
     log.debug("Token is: " + os.getToken());
     assert os.getToken() != null;
   }
 
   @Test
-  public void testListImages() {
+  public void launchInstance() throws Exception {}
+
+  @Test
+  public void listImages() throws Exception {
     try {
       for (NFVImage image : osd.listImages(vimInstance)) {
         log.info(image.toString());
@@ -69,7 +58,10 @@ public class TestOpenStackDriver {
   }
 
   @Test
-  public void testListNetwors() {
+  public void listServer() throws Exception {}
+
+  @Test
+  public void listNetworks() throws Exception {
     try {
       for (Network network : osd.listNetworks(vimInstance)) {
         log.info(network.toString());
@@ -78,6 +70,69 @@ public class TestOpenStackDriver {
       e.printStackTrace();
     }
   }
+
+  @Test
+  public void listFlavors() throws Exception {}
+
+  @Test
+  public void launchInstanceAndWait() throws Exception {}
+
+  @Test
+  public void launchInstanceAndWait1() throws Exception {}
+
+  @Test
+  public void deleteServerByIdAndWait() throws Exception {}
+
+  @Test
+  public void createNetwork() throws Exception {}
+
+  @Test
+  public void addFlavor() throws Exception {}
+
+  @Test
+  public void addImage() throws Exception {}
+
+  @Test
+  public void addImage1() throws Exception {}
+
+  @Test
+  public void updateImage() throws Exception {}
+
+  @Test
+  public void copyImage() throws Exception {}
+
+  @Test
+  public void deleteImage() throws Exception {}
+
+  @Test
+  public void updateFlavor() throws Exception {}
+
+  @Test
+  public void deleteFlavor() throws Exception {}
+
+  @Test
+  public void createSubnet() throws Exception {}
+
+  @Test
+  public void updateNetwork() throws Exception {}
+
+  @Test
+  public void updateSubnet() throws Exception {}
+
+  @Test
+  public void getSubnetsExtIds() throws Exception {}
+
+  @Test
+  public void deleteSubnet() throws Exception {}
+
+  @Test
+  public void deleteNetwork() throws Exception {}
+
+  @Test
+  public void getNetworkById() throws Exception {}
+
+  @Test
+  public void getQuota() throws Exception {}
 
   public static void main(String[] args) throws VimDriverException {
 
