@@ -34,6 +34,7 @@ import org.openstack4j.model.common.Identifier;
 import org.openstack4j.model.common.Payload;
 import org.openstack4j.model.common.Payloads;
 import org.openstack4j.model.compute.Flavor;
+import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.image.ContainerFormat;
 import org.openstack4j.model.image.DiskFormat;
 import org.openstack4j.model.image.Image;
@@ -49,7 +50,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
@@ -58,20 +58,14 @@ public class OpenStack4JDriver extends VimDriver {
 
   private static Logger log = LoggerFactory.getLogger(OpenStack4JDriver.class);
 
-  Properties overrides;
-
   public OpenStack4JDriver() {
     super();
     init();
   }
 
   public void init() {
-    overrides = new Properties();
     String sslChecksDisabled = properties.getProperty("disable-ssl-certificate-checks", "false");
     log.debug("Disable SSL certificate checks: {}", sslChecksDisabled);
-    //        if (sslChecksDisabled.trim().equals("true")) {
-    //            DisableSSLValidation.disableChecks();
-    //        }
   }
 
   public OSClientV3 authenticate(VimInstance vimInstance) throws VimDriverException {
@@ -89,7 +83,6 @@ public class OpenStack4JDriver extends VimDriver {
           .scopeToProject(project)
           .credentials(vimInstance.getUsername(), vimInstance.getPassword(), domain)
           .authenticate();
-
     } catch (AuthenticationException e) {
       throw new VimDriverException(e.getMessage(), e);
     }
@@ -258,7 +251,15 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public void deleteServerByIdAndWait(VimInstance vimInstance, String id)
-      throws VimDriverException {}
+      throws VimDriverException {
+    OSClientV3 os = this.authenticate(vimInstance);
+    /** I suppose that checking for the result waits also for the effectivness of the operation */
+    log.info(
+        "Deleting VM with id "
+            + id
+            + ", result is: "
+            + os.compute().servers().delete(id).isSuccess());
+  }
 
   @Override
   public Network createNetwork(VimInstance vimInstance, Network network) throws VimDriverException {
@@ -340,7 +341,8 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public boolean deleteImage(VimInstance vimInstance, NFVImage image) throws VimDriverException {
-    return false;
+    OSClientV3 os = this.authenticate(vimInstance);
+    return os.images().delete(image.getExtId()).isSuccess();
   }
 
   @Override
@@ -351,7 +353,8 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public boolean deleteFlavor(VimInstance vimInstance, String extId) throws VimDriverException {
-    return false;
+    OSClientV3 os = this.authenticate(vimInstance);
+    return os.compute().flavors().delete(extId).isSuccess();
   }
 
   @Override
@@ -394,7 +397,8 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public boolean deleteSubnet(VimInstance vimInstance, String existingSubnetExtId)
       throws VimDriverException {
-    return false;
+    OSClientV3 os = this.authenticate(vimInstance);
+    return os.networking().subnet().delete(existingSubnetExtId).isSuccess();
   }
 
   @Override
@@ -411,11 +415,13 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public Quota getQuota(VimInstance vimInstance) throws VimDriverException {
-    return null;
+    OSClientV3 os = this.authenticate(vimInstance);
+    QuotaSet qs = os.compute().quotaSets().get(vimInstance.getTenant());
+    return Utils.getQuota(qs, vimInstance.getTenant());
   }
 
   @Override
   public String getType(VimInstance vimInstance) throws VimDriverException {
-    return null;
+    return "openstack4j";
   }
 }

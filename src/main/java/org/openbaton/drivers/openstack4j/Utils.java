@@ -8,9 +8,11 @@ import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
+import org.openbaton.catalogue.nfvo.Quota;
 import org.openstack4j.api.Builders;
 import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
+import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.Server;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.Subnet;
@@ -91,5 +93,16 @@ class Utils {
     nfvNetwork.setExtId(network.getId());
     nfvNetwork.setSubnets(new HashSet<org.openbaton.catalogue.nfvo.Subnet>());
     return nfvNetwork;
+  }
+
+  static Quota getQuota(QuotaSet qs, String tenantId) {
+    Quota quota = new Quota();
+    quota.setTenant(tenantId);
+    quota.setCores(qs.getCores());
+    quota.setFloatingIps(qs.getFloatingIps());
+    quota.setInstances(qs.getInstances());
+    quota.setKeyPairs(qs.getKeyPairs());
+    quota.setRam(qs.getRam());
+    return quota;
   }
 }
