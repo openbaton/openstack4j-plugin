@@ -16,6 +16,16 @@
 
 package org.openbaton.drivers.openstack4j;
 
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.ReentrantLock;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -45,17 +55,6 @@ import org.openstack4j.model.network.NetFloatingIP;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -444,17 +443,8 @@ public class OpenStack4JDriver extends VimDriver {
 
     OSClient os = authenticate(vimInstance);
 
-    //    ActionResponse r = os.compute().floatingIps().addFloatingIP(server, "192.168.0.250", "50.50.2.3");
-
     boolean success = true;
     for (Address privateIp : server4j.getAddresses().getAddresses().get(fip.getKey())) {
-      //      for (Port port : os.networking().port().list()) {
-      //        if (port.getMacAddress().equalsIgnoreCase(privateIp.getMacAddr())) {
-      //          os.networking()
-      //              .floatingip()
-      //              .associateToPort(findFloatingIpId(os, fip.getValue()), port.getId());
-      //          return;
-      //        }
       success =
           success
               && os.compute()
@@ -464,8 +454,6 @@ public class OpenStack4JDriver extends VimDriver {
                       privateIp.getAddr(),
                       findFloatingIpId(os, fip.getValue()).getFloatingIpAddress())
                   .isSuccess();
-      //      }
-
     }
 
     if (success) return;

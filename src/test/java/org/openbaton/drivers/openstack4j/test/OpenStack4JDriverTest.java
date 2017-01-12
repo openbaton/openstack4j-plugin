@@ -1,5 +1,13 @@
 package org.openbaton.drivers.openstack4j.test;
 
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
@@ -12,15 +20,6 @@ import org.openbaton.exceptions.VimDriverException;
 import org.openstack4j.api.OSClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
 
 /** Created by lto on 11/01/2017. */
 public class OpenStack4JDriverTest {
