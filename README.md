@@ -1,4 +1,4 @@
-OpenBaton Openstack Plugin - Liberty branch
+# OpenBaton Openstack4j Plugin
 ----------------
 
 OpenBaton is an open source project providing a reference implementation of the NFVO and VNFM based on the [ETSI][NFV MANO] specification, is implemented in java using the [spring.io] framework. It consists of two main components: a NFVO and a generic VNFM. This project **openstack-plugin** contains an implementation of a plugin for OpenBaton system. This plugin is implemented with the help of plugin-sdk developed for the NFVO which allows NFVO to send requests to the plugin via AMQP server and allocate resources on Openstack. The default way of communication between the plugin and openstack is rabbitmq server. The plugin uses Apache Jclouds API and REST to communicate with Openstack. It is most widely used and tested with the Openstack-Kilo version to date. This is recommended and default Openstack distribution. However, if you want to use it with Openstack-Liberty, you can find the Liberty version of the plugin at [get.openbaton.org][get-openbaton-org-liberty] or in a specific branch of this project. Be aware, however, that liberty version uses the snapshot(not yet released) version of the jclouds API. 
@@ -14,8 +14,9 @@ You can also clone this project and build it with gradle yourself. After that th
 If you have placed the plugin as it was mentioned earlier, then NFVO will automatically start it with the right parameters. The plugin however is by itself an application which can be started remotely by using CLI. For this, you will need to type this into console. 
 
 ```bash
-$ java -jar path-to-plugin.jar openstack [rabbitmq-ip] [rabbitmq-port] [n-of-consumers] [user] [password]
+$ java -jar path-to-plugin.jar openstack4j [rabbitmq-ip] [rabbitmq-port] [n-of-consumers] [user] [password]
 ```
+
 ```properties
 rabbitmq-ip is the ip of the host where the rabbitmq server is installed and running
 rabbitmq-port is the port on which the rabbitmq accepts the messages(it is usually 5672 by default) 
