@@ -1,5 +1,10 @@
 package org.openbaton.drivers.openstack4j;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -11,47 +16,50 @@ import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.Server;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.Subnet;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Created by lto on 10/01/2017. */
 class Utils {
-  static DeploymentFlavour getFlavor(Flavor flavor) {
-    DeploymentFlavour flavour = new DeploymentFlavour();
+  private static Logger log = LoggerFactory.getLogger(Utils.class);
+
+  static DeploymentFlavour getFlavor(Flavor flavor4j) {
     DeploymentFlavour deploymentFlavour = new DeploymentFlavour();
-    deploymentFlavour.setFlavour_key(flavor.getName());
-    deploymentFlavour.setExtId(flavor.getId());
-    deploymentFlavour.setDisk(flavor.getDisk());
-    deploymentFlavour.setRam(flavor.getRam());
-    deploymentFlavour.setVcpus(flavor.getVcpus());
-    return flavour;
+    deploymentFlavour.setFlavour_key(flavor4j.getName());
+    deploymentFlavour.setExtId(flavor4j.getId());
+    deploymentFlavour.setDisk(flavor4j.getDisk());
+    deploymentFlavour.setRam(flavor4j.getRam());
+    deploymentFlavour.setVcpus(flavor4j.getVcpus());
+    return deploymentFlavour;
   }
 
-  static org.openbaton.catalogue.nfvo.Server getServer(Server srv) {
+  static org.openbaton.catalogue.nfvo.Server getServer(Server server4j, Flavor flavor4j) {
+    log.debug("Got Server to parse: " + server4j);
     org.openbaton.catalogue.nfvo.Server server = new org.openbaton.catalogue.nfvo.Server();
-    server.setName(srv.getName());
-    server.setExtId(srv.getId());
-    server.setCreated(srv.getCreated());
-    server.setExtendedStatus(srv.getStatus().value());
-    server.setStatus(srv.getStatus().value());
-    server.setHostName(srv.getName()); // TODO which one is correct?
-    server.setInstanceName(srv.getInstanceName());
+    server.setName(server4j.getName());
+    server.setExtId(server4j.getId());
+    server.setCreated(server4j.getCreated());
+    if (server4j.getStatus() != null) {
+      server.setExtendedStatus(server4j.getStatus().value());
+      server.setStatus(server4j.getStatus().value());
+    }
+    server.setHostName(server4j.getName()); // TODO which one is correct?
+    server.setInstanceName(server4j.getInstanceName());
     HashMap<String, List<String>> ips = new HashMap<>();
-    for (Map.Entry<String, List<? extends Address>> address :
-        srv.getAddresses().getAddresses().entrySet()) {
-      List<String> adrs = new ArrayList<>();
-      for (Address ip : address.getValue()) {
-        adrs.add(ip.getAddr());
+    if (server4j.getAddresses() != null && server4j.getAddresses().getAddresses() != null) {
+      for (Map.Entry<String, List<? extends Address>> address :
+          server4j.getAddresses().getAddresses().entrySet()) {
+        List<String> adrs = new ArrayList<>();
+        for (Address ip : address.getValue()) {
+          adrs.add(ip.getAddr());
+        }
+        ips.put(address.getKey(), adrs);
       }
-      ips.put(address.getKey(), adrs);
     }
     server.setIps(ips);
-    server.setFlavor(Utils.getFlavor(srv.getFlavor()));
-    server.setHypervisorHostName(srv.getHypervisorHostname());
+    if (flavor4j != null) server.setFlavor(Utils.getFlavor(flavor4j));
+    else if (server4j.getFlavor() != null) server.setFlavor(Utils.getFlavor(server4j.getFlavor()));
+    server.setHypervisorHostName(server4j.getHypervisorHostname());
     //TODO list floating ips
     //server.setFloatingIps();
     return server;

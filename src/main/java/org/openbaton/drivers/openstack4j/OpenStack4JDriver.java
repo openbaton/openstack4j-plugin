@@ -42,7 +42,6 @@ import org.openstack4j.model.image.DiskFormat;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.model.network.NetFloatingIP;
-import org.openstack4j.model.network.Port;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,7 +142,8 @@ public class OpenStack4JDriver extends VimDriver {
       List<String> networks = getNetowrkIdsFromNames(vimInstance, network);
 
       image = getImageIdFromName(vimInstance, image);
-      flavor = getFlavorIdFromName(vimInstance, flavor);
+      Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
+      flavor = flavor4j.getId();
       // temporary workaround for getting first security group as it seems not supported adding multiple security groups
       ServerCreate sc =
           Builders.server()
@@ -171,7 +171,7 @@ public class OpenStack4JDriver extends VimDriver {
               + ", networks: "
               + network);
       org.openstack4j.model.compute.Server server4j = os.compute().servers().boot(sc);
-      server = Utils.getServer(server4j);
+      server = Utils.getServer(server4j, flavor4j);
     } catch (Exception e) {
       log.error(e.getMessage(), e);
       throw new VimDriverException(e.getMessage());
@@ -180,12 +180,12 @@ public class OpenStack4JDriver extends VimDriver {
     return server;
   }
 
-  private String getFlavorIdFromName(VimInstance vimInstance, String flavor)
+  private Flavor getFlavorFromName(VimInstance vimInstance, String flavor)
       throws VimDriverException {
     OSClient os = authenticate(vimInstance);
     for (Flavor flavor4j : os.compute().flavors().list()) {
       if (flavor4j.getName().equals(flavor)) {
-        return flavor4j.getId();
+        return flavor4j;
       }
     }
     throw new VimDriverException("Flavor with name " + flavor + " was not found");
@@ -284,7 +284,7 @@ public class OpenStack4JDriver extends VimDriver {
       List<? extends org.openstack4j.model.compute.Server> servers = os.compute().servers().list();
       for (org.openstack4j.model.compute.Server srv : servers) {
 
-        obServers.add(Utils.getServer(srv));
+        obServers.add(Utils.getServer(srv, null));
       }
     } catch (Exception e) {
       log.error(e.getMessage(), e);
@@ -385,7 +385,9 @@ public class OpenStack4JDriver extends VimDriver {
         e.printStackTrace();
       }
       server4j = getServerById(vimInstance, server.getExtId());
-      server = Utils.getServer(server4j);
+      Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
+      log.debug("Found flavor4j: " + flavor4j);
+      server = Utils.getServer(server4j, flavor4j);
       if (server.getStatus().equalsIgnoreCase("ACTIVE")) {
         log.debug("Finished deployment of VM with hostname: " + name);
         bootCompleted = true;
@@ -439,26 +441,43 @@ public class OpenStack4JDriver extends VimDriver {
       org.openstack4j.model.compute.Server server4j,
       Map.Entry<String, String> fip)
       throws VimDriverException {
+
     OSClient os = authenticate(vimInstance);
+
+    //    ActionResponse r = os.compute().floatingIps().addFloatingIP(server, "192.168.0.250", "50.50.2.3");
+
+    boolean success = true;
     for (Address privateIp : server4j.getAddresses().getAddresses().get(fip.getKey())) {
-      for (Port port : os.networking().port().list()) {
-        if (port.getMacAddress().equalsIgnoreCase(privateIp.getMacAddr())) {
-          os.networking()
-              .floatingip()
-              .associateToPort(findFloatingIpId(os, fip.getValue()), port.getId());
-          return;
-        }
-      }
+      //      for (Port port : os.networking().port().list()) {
+      //        if (port.getMacAddress().equalsIgnoreCase(privateIp.getMacAddr())) {
+      //          os.networking()
+      //              .floatingip()
+      //              .associateToPort(findFloatingIpId(os, fip.getValue()), port.getId());
+      //          return;
+      //        }
+      success =
+          success
+              && os.compute()
+                  .floatingIps()
+                  .addFloatingIP(
+                      server4j,
+                      privateIp.getAddr(),
+                      findFloatingIpId(os, fip.getValue()).getFloatingIpAddress())
+                  .isSuccess();
+      //      }
+
     }
+
+    if (success) return;
     throw new VimDriverException("Not able to associate fip " + fip);
   }
 
-  private String findFloatingIpId(OSClient os, String fipValue) throws VimDriverException {
+  private NetFloatingIP findFloatingIpId(OSClient os, String fipValue) throws VimDriverException {
     if (fipValue.trim().equalsIgnoreCase("random"))
-      return os.networking().floatingip().list().get(0).getId();
+      return os.networking().floatingip().list().get(0);
     for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
       if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
-        return floatingIP.getId();
+        return floatingIP;
       }
     }
     throw new VimDriverException("Floating ip " + fipValue + " not found");
