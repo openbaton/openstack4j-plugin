@@ -64,7 +64,7 @@ project.ext {
     /**
      * gradle Related Vars
      */
-    mainClass = 'org.openbaton.clients.interfaces.client.openstack.OpenstackClient'
+    mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
     //------------------------------------------------//
 }
 
