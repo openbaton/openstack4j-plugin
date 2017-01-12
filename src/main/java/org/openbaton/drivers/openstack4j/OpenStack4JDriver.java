@@ -16,6 +16,19 @@
 
 package org.openbaton.drivers.openstack4j;
 
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -40,25 +53,14 @@ import org.openstack4j.model.compute.ServerCreate;
 import org.openstack4j.model.image.ContainerFormat;
 import org.openstack4j.model.image.DiskFormat;
 import org.openstack4j.model.image.Image;
+import org.openstack4j.model.network.AttachInterfaceType;
 import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.model.network.NetFloatingIP;
+import org.openstack4j.model.network.Router;
+import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -155,7 +157,7 @@ public class OpenStack4JDriver extends VimDriver {
               .image(image)
               .keypairName(keypair)
               .networks(networks)
-              .userData(new String(Base64.getEncoder().encode(userData.getBytes())))
+              .userData(new String(Base64.encodeBase64(userData.getBytes())))
               .build();
 
       for (String sg : secGroup) {
@@ -217,7 +219,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private List<NetFloatingIP> listFloatingIps(OSClient os) throws VimDriverException {
-//    OSClient os = this.authenticate(vimInstance);
+    //    OSClient os = this.authenticate(vimInstance);
     List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
     List<NetFloatingIP> res = new ArrayList<>();
     for (NetFloatingIP floatingIP : floatingIPs) {
@@ -418,7 +420,7 @@ public class OpenStack4JDriver extends VimDriver {
       }
       if (listFloatingIps(this.authenticate(vimInstance)).size() >= floatingIps.size()) {
         for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
-          if (server.getFloatingIps() == null){
+          if (server.getFloatingIps() == null) {
             server.setFloatingIps(new HashMap<String, String>());
           }
           server
@@ -474,8 +476,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private NetFloatingIP findFloatingIpId(OSClient os, String fipValue) throws VimDriverException {
-    if (fipValue.trim().equalsIgnoreCase("random"))
-      return listFloatingIps(os).get(0);
+    if (fipValue.trim().equalsIgnoreCase("random")) return listFloatingIps(os).get(0);
     for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
       if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
         return floatingIP;
@@ -560,13 +561,61 @@ public class OpenStack4JDriver extends VimDriver {
   public Network createNetwork(VimInstance vimInstance, Network network) throws VimDriverException {
 
     OSClient os = this.authenticate(vimInstance);
-    org.openstack4j.model.network.Network network4j = Utils.createNetwork(network);
-    os.networking().network().create(network4j);
-    Network res = Utils.getNetwork(network4j);
-    for (Subnet subnet : network.getSubnets()) {
-      network.getSubnets().add(createSubnet(vimInstance, res, subnet));
+    org.openstack4j.model.network.Network network4j =
+        os.networking()
+            .network()
+            .create(
+                Builders.network()
+                    .name(network.getName())
+                    .adminStateUp(true)
+                    .isShared(network.getShared())
+                    .build());
+    //    for (Subnet subnet : network.getSubnets()) {
+    //      Subnet sn = createSubnet(vimInstance, res, subnet);
+    //      res.getSubnets().add(sn);
+    //
+    //    }
+    return Utils.getNetwork(network4j);
+  }
+
+  private void attachToRouter(OSClient os, String subnetExtId, VimInstance vimInstance)
+      throws VimDriverException {
+    List<? extends Router> routers = os.networking().router().list();
+    RouterInterface iface;
+    if (routers != null && !routers.isEmpty()) {
+      Router router = routers.get(0);
+      iface =
+          os.networking()
+              .router()
+              .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnetExtId);
+    } else {
+      Router router = createRouter(os, vimInstance);
+      iface =
+          os.networking()
+              .router()
+              .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnetExtId);
     }
-    return res;
+    if (iface == null) throw new VimDriverException("Not Able to attach to router the new subnet");
+  }
+
+  private Router createRouter(OSClient os, VimInstance vimInstance) throws VimDriverException {
+    return os.networking()
+        .router()
+        .create(
+            Builders.router()
+                .name("openbaton-router")
+                .adminStateUp(true)
+                .externalGateway(getExternalNet(vimInstance).getExtId())
+                .build());
+  }
+
+  private Network getExternalNet(VimInstance vimInstance) throws VimDriverException {
+    for (Network net : listNetworks(vimInstance)) {
+      if (net.getExternal()) {
+        return net;
+      }
+    }
+    throw new VimDriverException("No External Network found! please add one");
   }
 
   @Override
@@ -662,14 +711,21 @@ public class OpenStack4JDriver extends VimDriver {
             .create(
                 Builders.subnet()
                     .name(subnet.getName())
-                    .networkId(subnet.getNetworkId())
+                    .networkId(createdNetwork.getExtId())
                     .ipVersion(IPVersionType.V4)
                     .cidr(subnet.getCidr())
                     .addDNSNameServer(properties.getProperty("openstack4j.dns.ip", "8.8.8.8"))
                     .enableDHCP(true)
                     .gateway(subnet.getGatewayIp())
                     .build());
-    return Utils.getSubnet(subnet4j);
+
+    Subnet sn = Utils.getSubnet(subnet4j);
+    try {
+      attachToRouter(os, sn.getExtId(), vimInstance);
+    } catch (VimDriverException e) {
+      log.error(e.getMessage());
+    }
+    return sn;
   }
 
   @Override

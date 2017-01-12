@@ -9,7 +9,6 @@ import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
 import org.openbaton.catalogue.nfvo.Quota;
-import org.openstack4j.api.Builders;
 import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
@@ -87,14 +86,6 @@ class Utils {
     nfvSubnet.setGatewayIp(subnet.getGateway());
     nfvSubnet.setNetworkId(subnet.getNetworkId());
     return nfvSubnet;
-  }
-
-  static org.openstack4j.model.network.Network createNetwork(Network network) {
-    return Builders.network()
-        .name(network.getName())
-        .adminStateUp(true)
-        .isShared(network.getShared())
-        .build();
   }
 
   static Network getNetwork(org.openstack4j.model.network.Network network) {
