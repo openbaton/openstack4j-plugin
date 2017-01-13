@@ -150,7 +150,7 @@ public class OpenStack4JDriver extends VimDriver {
       Set<String> secGroup,
       String userData)
       throws VimDriverException {
-    Server server;
+    Server server = null;
     try {
       OSClient os = this.authenticate(vimInstance);
       List<String> networks = getNetowrkIdsFromNames(vimInstance, network);
@@ -188,7 +188,10 @@ public class OpenStack4JDriver extends VimDriver {
       server = Utils.getServer(server4j, flavor4j);
     } catch (Exception e) {
       log.error(e.getMessage(), e);
-      throw new VimDriverException(e.getMessage());
+      VimDriverException vimDriverException = new VimDriverException(e.getMessage());
+      if (server != null)
+        vimDriverException.setServer(server);
+      throw vimDriverException;
     }
 
     return server;
@@ -407,69 +410,78 @@ public class OpenStack4JDriver extends VimDriver {
         this.launchInstance(
             vimInstance, name, image, flavor, keyPair, networks, securityGroups, userdata);
 
-    org.openstack4j.model.compute.Server server4j = null;
-    log.info(
-        "Deployed VM ( "
-            + server.getName()
-            + " ) with extId: "
-            + server.getExtId()
-            + " in status "
-            + server.getStatus());
-    while (!bootCompleted) {
-      log.debug("Waiting for VM with hostname: " + name + " to finish the launch");
-      try {
-        Thread.sleep(1000);
-      } catch (InterruptedException e) {
-        e.printStackTrace();
-      }
-      server4j = getServerById(vimInstance, server.getExtId());
-      Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
-      log.debug("Found flavor4j: " + flavor4j);
-      server = Utils.getServer(server4j, flavor4j);
-      if (server.getStatus().equalsIgnoreCase("ACTIVE")) {
-        log.debug("Finished deployment of VM with hostname: " + name);
-        bootCompleted = true;
-      }
-      if (server.getStatus().equals("ERROR")) {
-        log.error("Failed to launch VM with hostname: " + name + " -> Went into ERROR");
-        VimDriverException vimDriverException = new VimDriverException(server.getExtendedStatus());
-        vimDriverException.setServer(server);
-        throw vimDriverException;
-      }
-    }
-    if (floatingIps != null && floatingIps.size() > 0) {
-      OpenStack4JDriver.lock.lock(); // TODO chooseFloating ip is lock but association is parallel
-      log.debug("Assigning FloatingIPs to VM with hostname: " + name);
-      log.debug("FloatingIPs are: " + floatingIps);
-      int freeIps = listFloatingIps(this.authenticate(vimInstance), vimInstance).size();
-      int ipsNeeded = floatingIps.size();
-      if (freeIps < ipsNeeded) {
-        log.error(
-            "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
-        log.debug("Getting the pool name of a floating ip pool");
-        String pool_name = getIpPoolName(vimInstance);
-        allocateFloatingIps(vimInstance, pool_name, ipsNeeded - freeIps);
-      }
-      if (listFloatingIps(this.authenticate(vimInstance), vimInstance).size()
-          >= floatingIps.size()) {
-        for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
-          if (server.getFloatingIps() == null) {
-            server.setFloatingIps(new HashMap<String, String>());
-          }
-          server
-              .getFloatingIps()
-              .put(fip.getKey(), associateFloatingIpToNetwork(vimInstance, server4j, fip));
+    try {
+
+      org.openstack4j.model.compute.Server server4j = null;
+      log.info(
+          "Deployed VM ( "
+          + server.getName()
+          + " ) with extId: "
+          + server.getExtId()
+          + " in status "
+          + server.getStatus());
+      while (!bootCompleted) {
+        log.debug("Waiting for VM with hostname: " + name + " to finish the launch");
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
         }
-        log.info(
-            "Assigned FloatingIPs to VM with hostname: "
-                + name
-                + " -> FloatingIPs: "
-                + server.getFloatingIps());
-      } else {
-        log.error(
-            "Cannot assign FloatingIPs to VM with hostname: " + name + ". No FloatingIPs left...");
+        server4j = getServerById(vimInstance, server.getExtId());
+        Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
+        log.debug("Found flavor4j: " + flavor4j);
+        server = Utils.getServer(server4j, flavor4j);
+        if (server.getStatus().equalsIgnoreCase("ACTIVE")) {
+          log.debug("Finished deployment of VM with hostname: " + name);
+          bootCompleted = true;
+        }
+        if (server.getStatus().equals("ERROR")) {
+          log.error("Failed to launch VM with hostname: " + name + " -> Went into ERROR");
+          VimDriverException vimDriverException = new VimDriverException(server.getExtendedStatus());
+          vimDriverException.setServer(server);
+          throw vimDriverException;
+        }
       }
-      OpenStack4JDriver.lock.unlock();
+      if (floatingIps != null && floatingIps.size() > 0) {
+        OpenStack4JDriver.lock.lock(); // TODO chooseFloating ip is lock but association is parallel
+        log.debug("Assigning FloatingIPs to VM with hostname: " + name);
+        log.debug("FloatingIPs are: " + floatingIps);
+        int freeIps = listFloatingIps(this.authenticate(vimInstance), vimInstance).size();
+        int ipsNeeded = floatingIps.size();
+        if (freeIps < ipsNeeded) {
+          log.error(
+              "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
+          log.debug("Getting the pool name of a floating ip pool");
+          String pool_name = getIpPoolName(vimInstance);
+          allocateFloatingIps(vimInstance, pool_name, ipsNeeded - freeIps);
+        }
+        if (listFloatingIps(this.authenticate(vimInstance), vimInstance).size()
+            >= floatingIps.size()) {
+          for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
+            if (server.getFloatingIps() == null) {
+              server.setFloatingIps(new HashMap<String, String>());
+            }
+            server
+                .getFloatingIps()
+                .put(fip.getKey(), associateFloatingIpToNetwork(vimInstance, server4j, fip));
+          }
+          log.info(
+              "Assigned FloatingIPs to VM with hostname: "
+              + name
+              + " -> FloatingIPs: "
+              + server.getFloatingIps());
+        } else {
+          log.error(
+              "Cannot assign FloatingIPs to VM with hostname: " + name + ". No FloatingIPs left...");
+        }
+        OpenStack4JDriver.lock.unlock();
+      }
+    } catch (Exception e){
+      log.error(e.getMessage());
+      VimDriverException exception = new VimDriverException(e.getMessage(),e);
+      if (server != null)
+        exception.setServer(server);
+      throw exception;
     }
 
     log.info("Finish association of FIPs if any for server: " + server);
