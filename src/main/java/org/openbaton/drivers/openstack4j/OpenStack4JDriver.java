@@ -16,6 +16,8 @@
 
 package org.openbaton.drivers.openstack4j;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
@@ -560,12 +562,12 @@ public class OpenStack4JDriver extends VimDriver {
     log.debug("Going to add all keys: " + keys.size());
     userData += "\n";
     userData += "for x in `find /home/ -name authorized_keys`; do\n";
-    //    String oldKeys = gson.toJson(keys);
-    //
-    //    Set<org.openbaton.catalogue.security.Key> keysSet =
-    //        new Gson()
-    //            .fromJson(
-    //                oldKeys, new TypeToken<Set<Key>>() {}.getType());
+    /** doing this for avoiding a serialization error of gson */
+    Gson gson = new Gson();
+    String oldKeys = gson.toJson(keys);
+
+    Set<org.openbaton.catalogue.security.Key> keysSet =
+        gson.fromJson(oldKeys, new TypeToken<Set<Key>>() {}.getType());
 
     for (org.openbaton.catalogue.security.Key key : keys) {
       log.debug("Adding key: " + key.getName());
