@@ -16,6 +16,18 @@
 
 package org.openbaton.drivers.openstack4j;
 
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
@@ -50,19 +62,6 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -224,13 +223,18 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Image with name: " + imageName + " not found");
   }
 
-  private List<NetFloatingIP> listFloatingIps(OSClient os, VimInstance vimInstance) throws VimDriverException {
+  private List<NetFloatingIP> listFloatingIps(OSClient os, VimInstance vimInstance)
+      throws VimDriverException {
     //    OSClient os = this.authenticate(vimInstance);
     List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
 
     List<NetFloatingIP> res = new ArrayList<>();
     for (NetFloatingIP floatingIP : floatingIPs) {
-      if (isV3API(vimInstance) && floatingIP.getTenantId().equals(vimInstance.getTenant()) || (!isV3API(vimInstance) && floatingIP.getTenantId().equals(getTenantFromName(os,vimInstance.getTenant()).getId())))
+      if (isV3API(vimInstance) && floatingIP.getTenantId().equals(vimInstance.getTenant())
+          || (!isV3API(vimInstance)
+              && floatingIP
+                  .getTenantId()
+                  .equals(getTenantFromName(os, vimInstance.getTenant()).getId())))
         if (floatingIP.getFixedIpAddress() == null || floatingIP.getFixedIpAddress().equals("")) {
           res.add(floatingIP);
         }
@@ -296,7 +300,10 @@ public class OpenStack4JDriver extends VimDriver {
 
       List<? extends org.openstack4j.model.compute.Server> servers = os.compute().servers().list();
       for (org.openstack4j.model.compute.Server srv : servers) {
-        if ((isV3API(vimInstance) && srv.getTenantId().equals(vimInstance.getTenant()) || (!isV3API(vimInstance) && srv.getTenantId().equals(getTenantFromName(os,vimInstance.getTenant()).getId()))))
+        if ((isV3API(vimInstance) && srv.getTenantId().equals(vimInstance.getTenant())
+            || (!isV3API(vimInstance)
+                && srv.getTenantId()
+                    .equals(getTenantFromName(os, vimInstance.getTenant()).getId()))))
           obServers.add(Utils.getServer(srv, null));
       }
     } catch (Exception e) {
@@ -314,7 +321,12 @@ public class OpenStack4JDriver extends VimDriver {
           os.networking().network().list();
       List<Network> nfvNetworks = new ArrayList<>();
       for (org.openstack4j.model.network.Network network : networks) {
-        if ((network.isRouterExternal() || network.isShared()) || (isV3API(vimInstance) && network.getTenantId().equals(vimInstance.getTenant()) || (!isV3API(vimInstance) && network.getTenantId().equals(getTenantFromName(os,vimInstance.getTenant()).getId())))) {
+        if ((network.isRouterExternal() || network.isShared())
+            || (isV3API(vimInstance) && network.getTenantId().equals(vimInstance.getTenant())
+                || (!isV3API(vimInstance)
+                    && network
+                        .getTenantId()
+                        .equals(getTenantFromName(os, vimInstance.getTenant()).getId())))) {
           Network nfvNetwork = Utils.getNetwork(network);
           for (String subnetId : network.getSubnets()) {
             nfvNetwork.getSubnets().add(getSubnetById(os, vimInstance, subnetId));
@@ -434,7 +446,8 @@ public class OpenStack4JDriver extends VimDriver {
         String pool_name = getIpPoolName(vimInstance);
         allocateFloatingIps(vimInstance, pool_name, ipsNeeded - freeIps);
       }
-      if (listFloatingIps(this.authenticate(vimInstance), vimInstance).size() >= floatingIps.size()) {
+      if (listFloatingIps(this.authenticate(vimInstance), vimInstance).size()
+          >= floatingIps.size()) {
         for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
           if (server.getFloatingIps() == null) {
             server.setFloatingIps(new HashMap<String, String>());
@@ -491,7 +504,8 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Not able to associate fip " + fip);
   }
 
-  private NetFloatingIP findFloatingIpId(OSClient os, String fipValue, VimInstance vimInstance) throws VimDriverException {
+  private NetFloatingIP findFloatingIpId(OSClient os, String fipValue, VimInstance vimInstance)
+      throws VimDriverException {
     if (fipValue.trim().equalsIgnoreCase("random")) return listFloatingIps(os, vimInstance).get(0);
     for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
       if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
@@ -599,7 +613,11 @@ public class OpenStack4JDriver extends VimDriver {
     List<? extends Router> tmpRouters = os.networking().router().list();
     List<Router> routers = new ArrayList<>();
     for (Router router : tmpRouters)
-      if ((isV3API(vimInstance) && router.getTenantId().equals(vimInstance.getTenant()) || (!isV3API(vimInstance) && router.getTenantId().equals(getTenantFromName(os,vimInstance.getTenant()).getId()))))
+      if ((isV3API(vimInstance) && router.getTenantId().equals(vimInstance.getTenant())
+          || (!isV3API(vimInstance)
+              && router
+                  .getTenantId()
+                  .equals(getTenantFromName(os, vimInstance.getTenant()).getId()))))
         routers.add(router);
     RouterInterface iface;
     if (routers != null && !routers.isEmpty()) {
