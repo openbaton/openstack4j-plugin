@@ -93,7 +93,7 @@ class Utils {
     nfvNetwork.setName(network.getName());
     nfvNetwork.setExtId(network.getId());
     nfvNetwork.setExternal(network.isRouterExternal());
-    nfvNetwork.setSubnets(new HashSet<>());
+    nfvNetwork.setSubnets(new HashSet<org.openbaton.catalogue.nfvo.Subnet>());
     return nfvNetwork;
   }
 
