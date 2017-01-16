@@ -189,8 +189,7 @@ public class OpenStack4JDriver extends VimDriver {
     } catch (Exception e) {
       log.error(e.getMessage(), e);
       VimDriverException vimDriverException = new VimDriverException(e.getMessage());
-      if (server != null)
-        vimDriverException.setServer(server);
+      if (server != null) vimDriverException.setServer(server);
       throw vimDriverException;
     }
 
@@ -415,11 +414,11 @@ public class OpenStack4JDriver extends VimDriver {
       org.openstack4j.model.compute.Server server4j = null;
       log.info(
           "Deployed VM ( "
-          + server.getName()
-          + " ) with extId: "
-          + server.getExtId()
-          + " in status "
-          + server.getStatus());
+              + server.getName()
+              + " ) with extId: "
+              + server.getExtId()
+              + " in status "
+              + server.getStatus());
       while (!bootCompleted) {
         log.debug("Waiting for VM with hostname: " + name + " to finish the launch");
         try {
@@ -437,7 +436,8 @@ public class OpenStack4JDriver extends VimDriver {
         }
         if (server.getStatus().equals("ERROR")) {
           log.error("Failed to launch VM with hostname: " + name + " -> Went into ERROR");
-          VimDriverException vimDriverException = new VimDriverException(server.getExtendedStatus());
+          VimDriverException vimDriverException =
+              new VimDriverException(server.getExtendedStatus());
           vimDriverException.setServer(server);
           throw vimDriverException;
         }
@@ -467,20 +467,21 @@ public class OpenStack4JDriver extends VimDriver {
           }
           log.info(
               "Assigned FloatingIPs to VM with hostname: "
-              + name
-              + " -> FloatingIPs: "
-              + server.getFloatingIps());
+                  + name
+                  + " -> FloatingIPs: "
+                  + server.getFloatingIps());
         } else {
           log.error(
-              "Cannot assign FloatingIPs to VM with hostname: " + name + ". No FloatingIPs left...");
+              "Cannot assign FloatingIPs to VM with hostname: "
+                  + name
+                  + ". No FloatingIPs left...");
         }
         OpenStack4JDriver.lock.unlock();
       }
-    } catch (Exception e){
+    } catch (Exception e) {
       log.error(e.getMessage());
-      VimDriverException exception = new VimDriverException(e.getMessage(),e);
-      if (server != null)
-        exception.setServer(server);
+      VimDriverException exception = new VimDriverException(e.getMessage(), e);
+      if (server != null) exception.setServer(server);
       throw exception;
     }
 
@@ -580,9 +581,10 @@ public class OpenStack4JDriver extends VimDriver {
     Gson gson = new Gson();
     String oldKeys = gson.toJson(keys);
     Set<org.openbaton.catalogue.security.Key> keysSet =
-        gson.fromJson(oldKeys, new TypeToken<Set<org.openbaton.catalogue.security.Key>>() {}.getType());
+        gson.fromJson(
+            oldKeys, new TypeToken<Set<org.openbaton.catalogue.security.Key>>() {}.getType());
 
-    for (org.openbaton.catalogue.security.Key key: keysSet) {
+    for (org.openbaton.catalogue.security.Key key : keysSet) {
       log.debug("Adding key: " + key.getName());
       userData += "\techo \"" + key.getPublicKey() + "\" >> $x\n";
     }
