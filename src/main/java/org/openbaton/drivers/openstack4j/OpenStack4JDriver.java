@@ -42,6 +42,7 @@ import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.ServerCreate;
 import org.openstack4j.model.identity.v2.Tenant;
+import org.openstack4j.model.identity.v3.Region;
 import org.openstack4j.model.image.ContainerFormat;
 import org.openstack4j.model.image.DiskFormat;
 import org.openstack4j.model.image.Image;
@@ -92,15 +93,28 @@ public class OpenStack4JDriver extends VimDriver {
     log.debug("Domain id: " + domain.getId());
     log.debug("Project id: " + project.getId());
 
+    OSClient os;
     try {
       if (isV3API(vimInstance)) {
-        return OSFactory.builderV3()
+        os = OSFactory.builderV3()
             .endpoint(vimInstance.getAuthUrl())
             .scopeToProject(project)
             .credentials(vimInstance.getUsername(), vimInstance.getPassword(), domain)
             .authenticate();
+        try {
+          Region region = ((OSClient.OSClientV3) os).identity().regions().get(vimInstance.getLocation().getName());
+
+          if (region == null){
+            return os;
+          }
+        }
+        catch (Exception ignored){
+          log.warn("no region with name: " + vimInstance.getLocation().getName());
+          return os;
+        }
+        ((OSClient.OSClientV3) os).useRegion(vimInstance.getLocation().getName());
       } else {
-        return OSFactory.builderV2()
+        os =  OSFactory.builderV2()
             .endpoint(vimInstance.getAuthUrl())
             .credentials(vimInstance.getUsername(), vimInstance.getPassword())
             .tenantName(vimInstance.getTenant())
@@ -109,6 +123,8 @@ public class OpenStack4JDriver extends VimDriver {
     } catch (AuthenticationException e) {
       throw new VimDriverException(e.getMessage(), e);
     }
+    return os;
+
   }
 
   private boolean isV3API(VimInstance vimInstance) {
