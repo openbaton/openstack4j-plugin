@@ -19,18 +19,18 @@ ext {
     openbatonInstallDir = "/opt/openbaton"
 }
 
-task makedeb(type: Deb, dependsOn: [jar, build]) { 
-    packageName = (applicationRelease) ? "openbaton-openstack-vimplugin" : "openbaton-openstack-vimplugin-nightly"
+task makedeb(type: Deb, dependsOn: [jar, build]) {
+    packageName = (applicationRelease) ? "openbaton-openstack4j-vimplugin" : "openbaton-openstack4j-vimplugin-nightly"
     version = debianApplicationVersionFull
-    //release = 1 
+    //release = 1
     priority = 'optional'
     arch = 'all'
     maintainer = 'Open Baton Team <dev@openbaton.org>'
     vendor = 'Open Source (Implemented by Fraunhofer FOKUS and TUB)'
     license = 'Apache 2.0 License'
     url = 'http://openbaton.github.io/index.html'
-    summary = 'OpenStack Virtualized Infrastructure Manager (VIM) Driver Plugin for the Open Baton Project'
-    packageDescription = 'The OpenStack VIM Driver Plugin is a component of the Open Baton projetc, which is an ETSI compliant implementation of a NFV Management and Orchestration (MANO). It allows, using the Open Baton system, to deploy services on an OpenStack-based Network Function Virtualization Infrastructure (NFVI) instance'
+    summary = 'OpenStack Virtualized Infrastructure Manager (VIM) Driver Plugin for the Open Baton Project compliant with OpenStack V3 API'
+    packageDescription = 'The OpenStack VIM Driver Plugin is a component of the Open Baton project, which is an ETSI compliant implementation of a NFV Management and Orchestration (MANO). It allows, using the Open Baton system, to deploy services on an OpenStack-based Network Function Virtualization Infrastructure (NFVI) instance'
 
 
     // Copy files from "from path" to "into path"

@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
@@ -97,6 +98,7 @@ public class OpenStack4JDriverTest {
   }
 
   @Test
+  @Ignore
   public void launchInstanceAndWait() throws VimDriverException {
 
     Map<String, String> fips = new HashMap<>();
