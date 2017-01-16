@@ -18,7 +18,18 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
@@ -55,19 +66,6 @@ import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
 
@@ -96,35 +94,39 @@ public class OpenStack4JDriver extends VimDriver {
     OSClient os;
     try {
       if (isV3API(vimInstance)) {
-        os = OSFactory.builderV3()
-            .endpoint(vimInstance.getAuthUrl())
-            .scopeToProject(project)
-            .credentials(vimInstance.getUsername(), vimInstance.getPassword(), domain)
-            .authenticate();
+        os =
+            OSFactory.builderV3()
+                .endpoint(vimInstance.getAuthUrl())
+                .scopeToProject(project)
+                .credentials(vimInstance.getUsername(), vimInstance.getPassword(), domain)
+                .authenticate();
         try {
-          Region region = ((OSClient.OSClientV3) os).identity().regions().get(vimInstance.getLocation().getName());
+          Region region =
+              ((OSClient.OSClientV3) os)
+                  .identity()
+                  .regions()
+                  .get(vimInstance.getLocation().getName());
 
-          if (region == null){
+          if (region == null) {
             return os;
           }
-        }
-        catch (Exception ignored){
+        } catch (Exception ignored) {
           log.warn("no region with name: " + vimInstance.getLocation().getName());
           return os;
         }
         ((OSClient.OSClientV3) os).useRegion(vimInstance.getLocation().getName());
       } else {
-        os =  OSFactory.builderV2()
-            .endpoint(vimInstance.getAuthUrl())
-            .credentials(vimInstance.getUsername(), vimInstance.getPassword())
-            .tenantName(vimInstance.getTenant())
-            .authenticate();
+        os =
+            OSFactory.builderV2()
+                .endpoint(vimInstance.getAuthUrl())
+                .credentials(vimInstance.getUsername(), vimInstance.getPassword())
+                .tenantName(vimInstance.getTenant())
+                .authenticate();
       }
     } catch (AuthenticationException e) {
       throw new VimDriverException(e.getMessage(), e);
     }
     return os;
-
   }
 
   private boolean isV3API(VimInstance vimInstance) {
@@ -175,15 +177,27 @@ public class OpenStack4JDriver extends VimDriver {
       Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
       flavor = flavor4j.getId();
       // temporary workaround for getting first security group as it seems not supported adding multiple security groups
-      ServerCreate sc =
-          Builders.server()
-              .name(name)
-              .flavor(flavor)
-              .image(image)
-              .keypairName(keypair)
-              .networks(networks)
-              .userData(new String(Base64.encodeBase64(userData.getBytes())))
-              .build();
+      ServerCreate sc;
+      if (keypair == null || keypair.equals("")) {
+        sc =
+            Builders.server()
+                .name(name)
+                .flavor(flavor)
+                .image(image)
+                .networks(networks)
+                .userData(new String(Base64.encodeBase64(userData.getBytes())))
+                .build();
+      } else {
+        sc =
+            Builders.server()
+                .name(name)
+                .flavor(flavor)
+                .image(image)
+                .keypairName(keypair)
+                .networks(networks)
+                .userData(new String(Base64.encodeBase64(userData.getBytes())))
+                .build();
+      }
 
       for (String sg : secGroup) {
         sc.addSecurityGroup(sg);
@@ -450,7 +464,8 @@ public class OpenStack4JDriver extends VimDriver {
           log.debug("Finished deployment of VM with hostname: " + name);
           bootCompleted = true;
         }
-        if (server.getExtendedStatus().equalsIgnoreCase("ERROR") || server.getStatus().equalsIgnoreCase("ERROR")) {
+        if (server.getExtendedStatus().equalsIgnoreCase("ERROR")
+            || server.getStatus().equalsIgnoreCase("ERROR")) {
           log.error("Failed to launch VM with hostname: " + name + " -> Went into ERROR");
           VimDriverException vimDriverException =
               new VimDriverException(server.getExtendedStatus());
