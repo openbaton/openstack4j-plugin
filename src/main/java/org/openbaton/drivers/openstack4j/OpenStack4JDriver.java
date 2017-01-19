@@ -21,6 +21,7 @@ import com.google.gson.reflect.TypeToken;
 
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
+import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
 import org.openbaton.catalogue.nfvo.Quota;
@@ -60,6 +61,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -166,7 +169,7 @@ public class OpenStack4JDriver extends VimDriver {
       String image,
       String flavor,
       String keypair,
-      Set<String> network,
+      Set<VNFDConnectionPoint> network,
       Set<String> secGroup,
       String userData)
       throws VimDriverException {
@@ -239,15 +242,41 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Flavor with name " + flavor + " was not found");
   }
 
-  private List<String> getNetowrkIdsFromNames(VimInstance vimInstance, Set<String> networks)
-      throws VimDriverException {
+  private List<String> getNetowrkIdsFromNames(
+      VimInstance vimInstance, Set<VNFDConnectionPoint> networks) throws VimDriverException {
     OSClient os = authenticate(vimInstance);
     List<String> res = new ArrayList<>();
-    for (org.openstack4j.model.network.Network network4j : os.networking().network().list()) {
-      if (networks.contains(network4j.getName()) || networks.contains(network4j.getId())) {
-        res.add(network4j.getId());
+    List<? extends org.openstack4j.model.network.Network> networkList =
+        os.networking().network().list();
+
+    Gson gson = new Gson();
+    String oldVNFDCP = gson.toJson(networks);
+    Set<VNFDConnectionPoint> newNetworks =
+        gson.fromJson(
+            oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
+
+    VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
+    Arrays.sort(
+        vnfdConnectionPoints,
+        new Comparator<VNFDConnectionPoint>() {
+          @Override
+          public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
+            return o1.getInterfaceId() - o2.getInterfaceId();
+          }
+        });
+
+    String tenantId = isV3API(vimInstance) ? vimInstance.getTenant() : getTenantFromName(os,vimInstance.getTenant()).getId();
+    for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
+      for (org.openstack4j.model.network.Network network4j : networkList) {
+
+        if ((vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getName())
+             || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId())) && network4j.getTenantId().equals(tenantId)) {
+          if (!res.contains(network4j.getId()))
+            res.add(network4j.getId());
+        }
       }
     }
+    log.debug("result " + res);
     return res;
   }
 
@@ -427,7 +456,7 @@ public class OpenStack4JDriver extends VimDriver {
       String image,
       String flavor,
       String keyPair,
-      Set<String> networks,
+      Set<VNFDConnectionPoint> networks,
       Set<String> securityGroups,
       String userdata,
       Map<String, String> floatingIps,
@@ -591,7 +620,7 @@ public class OpenStack4JDriver extends VimDriver {
       String image,
       String extId,
       String keyPair,
-      Set<String> networks,
+      Set<VNFDConnectionPoint> networks,
       Set<String> securityGroups,
       String userdata)
       throws VimDriverException {
