@@ -18,7 +18,20 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -55,21 +68,6 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -252,8 +250,7 @@ public class OpenStack4JDriver extends VimDriver {
     Gson gson = new Gson();
     String oldVNFDCP = gson.toJson(networks);
     Set<VNFDConnectionPoint> newNetworks =
-        gson.fromJson(
-            oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
+        gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
 
     VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
     Arrays.sort(
@@ -265,14 +262,17 @@ public class OpenStack4JDriver extends VimDriver {
           }
         });
 
-    String tenantId = isV3API(vimInstance) ? vimInstance.getTenant() : getTenantFromName(os,vimInstance.getTenant()).getId();
+    String tenantId =
+        isV3API(vimInstance)
+            ? vimInstance.getTenant()
+            : getTenantFromName(os, vimInstance.getTenant()).getId();
     for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
       for (org.openstack4j.model.network.Network network4j : networkList) {
 
         if ((vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getName())
-             || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId())) && network4j.getTenantId().equals(tenantId)) {
-          if (!res.contains(network4j.getId()))
-            res.add(network4j.getId());
+                || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId()))
+            && (network4j.getTenantId().equals(tenantId) || network4j.isShared())) {
+          if (!res.contains(network4j.getId())) res.add(network4j.getId());
         }
       }
     }
