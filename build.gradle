@@ -65,6 +65,7 @@ project.ext {
      * gradle Related Vars
      */
     mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
+    obVersion = '3.2.0-SNAPSHOT'
     //------------------------------------------------//
 }
 
@@ -80,7 +81,6 @@ repositories {
     }
 }
 dependencies {
-    def obVersion = '3.1.1-SNAPSHOT'
     compile 'org.openbaton:catalogue:' + obVersion
     compile 'org.openbaton:monitoring:' + obVersion
     compile 'org.openbaton:vim-drivers:' + obVersion

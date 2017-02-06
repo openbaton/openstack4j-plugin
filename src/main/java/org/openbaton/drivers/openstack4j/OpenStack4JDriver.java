@@ -139,16 +139,7 @@ public class OpenStack4JDriver extends VimDriver {
   public static void main(String[] args)
       throws NoSuchMethodException, IOException, InstantiationException, TimeoutException,
           IllegalAccessException, InvocationTargetException {
-    if (args.length == 6) {
-      PluginStarter.registerPlugin(
-          OpenStack4JDriver.class,
-          args[0],
-          args[1],
-          Integer.parseInt(args[2]),
-          Integer.parseInt(args[3]),
-          args[4],
-          args[5]);
-    } else if (args.length == 4) {
+    if (args.length == 4) {
       PluginStarter.registerPlugin(
           OpenStack4JDriver.class,
           args[0],
@@ -268,7 +259,7 @@ public class OpenStack4JDriver extends VimDriver {
             : getTenantFromName(os, vimInstance.getTenant()).getId();
     for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
       for (org.openstack4j.model.network.Network network4j : networkList) {
-
+        log.debug("Network " + network4j.getName() + " is shared? " + network4j.isShared());
         if ((vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getName())
                 || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId()))
             && (network4j.getTenantId().equals(tenantId) || network4j.isShared())) {
@@ -588,7 +579,8 @@ public class OpenStack4JDriver extends VimDriver {
 
   private NetFloatingIP findFloatingIpId(OSClient os, String fipValue, VimInstance vimInstance)
       throws VimDriverException {
-    if (fipValue.trim().equalsIgnoreCase("random")) return listFloatingIps(os, vimInstance).get(0);
+    if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals(""))
+      return listFloatingIps(os, vimInstance).get(0);
     for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
       if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
         return floatingIP;
