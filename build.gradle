@@ -65,6 +65,7 @@ project.ext {
      * gradle Related Vars
      */
     mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
+    obVersion = '3.2.0-SNAPSHOT'
     //------------------------------------------------//
 }
 
@@ -80,11 +81,11 @@ repositories {
     }
 }
 dependencies {
-    compile 'org.openbaton:catalogue:2.2.0'
-    compile 'org.openbaton:monitoring:2.2.0'
-    compile 'org.openbaton:vim-drivers:2.2.0'
-    compile 'org.openbaton:exception:2.2.0'
-    compile 'org.openbaton:plugin-sdk:2.2.0'
+    compile 'org.openbaton:catalogue:' + obVersion
+    compile 'org.openbaton:monitoring:' + obVersion
+    compile 'org.openbaton:vim-drivers:' + obVersion
+    compile 'org.openbaton:exception:' + obVersion
+    compile 'org.openbaton:plugin-sdk:' + obVersion
 
     compile group: 'org.pacesys', name: 'openstack4j', version: '3.0.3'
 

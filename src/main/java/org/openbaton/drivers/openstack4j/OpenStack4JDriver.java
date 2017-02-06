@@ -18,9 +18,23 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
+import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
 import org.openbaton.catalogue.nfvo.Quota;
@@ -54,19 +68,6 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -138,16 +139,7 @@ public class OpenStack4JDriver extends VimDriver {
   public static void main(String[] args)
       throws NoSuchMethodException, IOException, InstantiationException, TimeoutException,
           IllegalAccessException, InvocationTargetException {
-    if (args.length == 6) {
-      PluginStarter.registerPlugin(
-          OpenStack4JDriver.class,
-          args[0],
-          args[1],
-          Integer.parseInt(args[2]),
-          Integer.parseInt(args[3]),
-          args[4],
-          args[5]);
-    } else if (args.length == 4) {
+    if (args.length == 4) {
       PluginStarter.registerPlugin(
           OpenStack4JDriver.class,
           args[0],
@@ -166,7 +158,7 @@ public class OpenStack4JDriver extends VimDriver {
       String image,
       String flavor,
       String keypair,
-      Set<String> network,
+      Set<VNFDConnectionPoint> network,
       Set<String> secGroup,
       String userData)
       throws VimDriverException {
@@ -239,15 +231,43 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Flavor with name " + flavor + " was not found");
   }
 
-  private List<String> getNetowrkIdsFromNames(VimInstance vimInstance, Set<String> networks)
-      throws VimDriverException {
+  private List<String> getNetowrkIdsFromNames(
+      VimInstance vimInstance, Set<VNFDConnectionPoint> networks) throws VimDriverException {
     OSClient os = authenticate(vimInstance);
     List<String> res = new ArrayList<>();
-    for (org.openstack4j.model.network.Network network4j : os.networking().network().list()) {
-      if (networks.contains(network4j.getName()) || networks.contains(network4j.getId())) {
-        res.add(network4j.getId());
+    List<? extends org.openstack4j.model.network.Network> networkList =
+        os.networking().network().list();
+
+    Gson gson = new Gson();
+    String oldVNFDCP = gson.toJson(networks);
+    Set<VNFDConnectionPoint> newNetworks =
+        gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
+
+    VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
+    Arrays.sort(
+        vnfdConnectionPoints,
+        new Comparator<VNFDConnectionPoint>() {
+          @Override
+          public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
+            return o1.getInterfaceId() - o2.getInterfaceId();
+          }
+        });
+
+    String tenantId =
+        isV3API(vimInstance)
+            ? vimInstance.getTenant()
+            : getTenantFromName(os, vimInstance.getTenant()).getId();
+    for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
+      for (org.openstack4j.model.network.Network network4j : networkList) {
+        log.debug("Network " + network4j.getName() + " is shared? " + network4j.isShared());
+        if ((vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getName())
+                || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId()))
+            && (network4j.getTenantId().equals(tenantId) || network4j.isShared())) {
+          if (!res.contains(network4j.getId())) res.add(network4j.getId());
+        }
       }
     }
+    log.debug("result " + res);
     return res;
   }
 
@@ -427,7 +447,7 @@ public class OpenStack4JDriver extends VimDriver {
       String image,
       String flavor,
       String keyPair,
-      Set<String> networks,
+      Set<VNFDConnectionPoint> networks,
       Set<String> securityGroups,
       String userdata,
       Map<String, String> floatingIps,
@@ -559,7 +579,8 @@ public class OpenStack4JDriver extends VimDriver {
 
   private NetFloatingIP findFloatingIpId(OSClient os, String fipValue, VimInstance vimInstance)
       throws VimDriverException {
-    if (fipValue.trim().equalsIgnoreCase("random")) return listFloatingIps(os, vimInstance).get(0);
+    if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals(""))
+      return listFloatingIps(os, vimInstance).get(0);
     for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
       if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
         return floatingIP;
@@ -591,7 +612,7 @@ public class OpenStack4JDriver extends VimDriver {
       String image,
       String extId,
       String keyPair,
-      Set<String> networks,
+      Set<VNFDConnectionPoint> networks,
       Set<String> securityGroups,
       String userdata)
       throws VimDriverException {

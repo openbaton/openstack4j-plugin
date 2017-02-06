@@ -8,10 +8,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
+import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
 import org.openbaton.catalogue.nfvo.Server;
@@ -113,6 +115,14 @@ public class OpenStack4JDriverTest {
       fips.put(netName, "random");
       break;
     }
+    Set<VNFDConnectionPoint> connectionPoints = new HashSet<>();
+    int interFaceId = 0;
+    for (String name : networksNames) {
+      VNFDConnectionPoint cp = new VNFDConnectionPoint();
+      cp.setVirtual_link_reference(name);
+      cp.setInterfaceId(interFaceId++);
+    }
+
     Server server =
         osd.launchInstanceAndWait(
             vimInstance,
@@ -120,7 +130,7 @@ public class OpenStack4JDriverTest {
             properties.getProperty("vim.instance.image.name", "Ubuntu 14.04.4 x86_64"),
             properties.getProperty("vim.instance.flavor.name", "m1.small"),
             properties.getProperty("vim.instance.keypair.name", "stack"),
-            new HashSet<String>(networksNames),
+            connectionPoints,
             new HashSet<String>(
                 Arrays.asList(
                     properties
