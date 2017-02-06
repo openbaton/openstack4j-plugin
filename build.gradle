@@ -103,7 +103,7 @@ dependencies {
     testCompile("junit:junit:4.12")
 }
 
-apply from: 'gradle/gradle/packaging.vimplugin.debian.gradle'
+apply from: 'gradle/gradle/packaging.plugin-vimdriver-openstack.debian.gradle'
 compileJava.dependsOn tasks.googleJavaFormat
 
 
