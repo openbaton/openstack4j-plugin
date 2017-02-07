@@ -48,6 +48,7 @@ import org.openbaton.vim.drivers.interfaces.VimDriver;
 import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient;
 import org.openstack4j.api.exceptions.AuthenticationException;
+import org.openstack4j.model.common.ActionResponse;
 import org.openstack4j.model.common.Identifier;
 import org.openstack4j.model.common.Payload;
 import org.openstack4j.model.common.Payloads;
@@ -57,8 +58,6 @@ import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.ServerCreate;
 import org.openstack4j.model.identity.v2.Tenant;
 import org.openstack4j.model.identity.v3.Region;
-import org.openstack4j.model.image.ContainerFormat;
-import org.openstack4j.model.image.DiskFormat;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.AttachInterfaceType;
 import org.openstack4j.model.network.IPVersionType;
@@ -750,38 +749,68 @@ public class OpenStack4JDriver extends VimDriver {
     return Utils.getFlavor(flavor);
   }
 
-  //TODO need to chage byte[] to stream, at least...
   @Override
-  public NFVImage addImage(VimInstance vimInstance, NFVImage image, byte[] imageFile)
-      throws VimDriverException {
-    return null;
-  }
-
-  @Override
-  public NFVImage addImage(VimInstance vimInstance, NFVImage image, String image_url)
+  public NFVImage addImage(final VimInstance vimInstance, NFVImage image, String image_url)
       throws VimDriverException {
     OSClient os = this.authenticate(vimInstance);
-    Payload<URL> payload;
+    final Payload<URL> payload;
     try {
       payload = Payloads.create(new URL(image_url));
     } catch (MalformedURLException e) {
       e.printStackTrace();
       throw new VimDriverException(e.getMessage(), e);
     }
-    Image image4j =
-        os.images()
+    //    Image image4j =
+    //        os.images()
+    //            .create(
+    //                Builders.image()
+    //                    .name(image.getName())
+    //                    .isPublic(image.isPublic())
+    //                    .containerFormat(
+    //                        ContainerFormat.value(image.getContainerFormat().toUpperCase()))
+    //                    .diskFormat(DiskFormat.value(image.getDiskFormat().toUpperCase()))
+    //                    .minDisk(image.getMinDiskSpace())
+    //                    .minRam(image.getMinRam())
+    //                    .build(),
+    //                payload);
+    //    return Utils.getImage(image4j);
+
+    final org.openstack4j.model.image.v2.Image imageV2 =
+        os.imagesV2()
             .create(
-                Builders.image()
+                Builders.imageV2()
                     .name(image.getName())
-                    .isPublic(image.isPublic())
                     .containerFormat(
-                        ContainerFormat.value(image.getContainerFormat().toUpperCase()))
-                    .diskFormat(DiskFormat.value(image.getDiskFormat().toUpperCase()))
-                    .minDisk(image.getMinDiskSpace())
-                    .minRam(image.getMinRam())
-                    .build(),
-                payload);
-    return Utils.getImage(image4j);
+                        org.openstack4j.model.image.v2.ContainerFormat.value(
+                            image.getContainerFormat().toUpperCase()))
+                    .visibility(
+                        image.isPublic()
+                            ? org.openstack4j.model.image.v2.Image.ImageVisibility.PUBLIC
+                            : org.openstack4j.model.image.v2.Image.ImageVisibility.PRIVATE)
+                    .diskFormat(
+                        org.openstack4j.model.image.v2.DiskFormat.value(
+                            image.getDiskFormat().toUpperCase()))
+                    .minDisk((int) image.getMinDiskSpace())
+                    .minRam((int) image.getMinRam())
+                    .build());
+
+    Thread t =
+        new Thread(
+            new Runnable() {
+              @Override
+              public void run() {
+                OSClient os = null;
+                try {
+                  os = authenticate(vimInstance);
+                } catch (VimDriverException e) {
+                  e.printStackTrace();
+                }
+                ActionResponse upload = os.imagesV2().upload(imageV2.getId(), payload, imageV2);
+              }
+            });
+
+    t.start();
+    return Utils.getImageV2(imageV2);
   }
 
   @Override
@@ -838,6 +867,13 @@ public class OpenStack4JDriver extends VimDriver {
       log.error(e.getMessage());
     }
     return sn;
+  }
+
+  //TODO need to chage byte[] to stream, at least...
+  @Override
+  public NFVImage addImage(VimInstance vimInstance, NFVImage image, byte[] imageFile)
+      throws VimDriverException {
+    throw new UnsupportedOperationException();
   }
 
   @Override

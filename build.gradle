@@ -65,7 +65,8 @@ project.ext {
      * gradle Related Vars
      */
     mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
-    obVersion = '3.2.0-SNAPSHOT'
+    obVersion = '3.2.0'
+    obSnapshotVersion = '3.2.1-SNAPSHOT'
     //------------------------------------------------//
 }
 
@@ -76,8 +77,10 @@ apply from: 'gradle/gradle/git.release.gradle'
 repositories {
     mavenCentral()
     maven {
-        //url "http://get.openbaton.org:8081/nexus/content/groups/public"
         url "https://oss.sonatype.org/content/repositories/snapshots/"
+    }
+    maven {
+        url "https://oss.sonatype.org/content/repositories/releases/"
     }
 }
 dependencies {
@@ -85,7 +88,9 @@ dependencies {
     compile 'org.openbaton:monitoring:' + obVersion
     compile 'org.openbaton:vim-drivers:' + obVersion
     compile 'org.openbaton:exception:' + obVersion
-    compile 'org.openbaton:plugin-sdk:' + obVersion
+    compile 'org.openbaton:plugin-sdk:' + obSnapshotVersion
+
+    compile 'org.apache.jclouds.labs:openstack-glance:2.0.0'
 
     compile group: 'org.pacesys', name: 'openstack4j', version: '3.0.3'
 

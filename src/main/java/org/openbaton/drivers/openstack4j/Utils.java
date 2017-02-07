@@ -78,6 +78,20 @@ class Utils {
     return nfvImage;
   }
 
+  public static NFVImage getImageV2(org.openstack4j.model.image.v2.Image image) {
+    NFVImage nfvImage = new NFVImage();
+    nfvImage.setName(image.getName());
+    nfvImage.setExtId(image.getId());
+    nfvImage.setMinRam(image.getMinRam());
+    nfvImage.setMinDiskSpace(image.getMinDisk());
+    nfvImage.setCreated(image.getCreatedAt());
+    nfvImage.setUpdated(image.getUpdatedAt());
+    nfvImage.setIsPublic(!image.getIsProtected());
+    nfvImage.setDiskFormat(image.getDiskFormat().toString().toUpperCase());
+    nfvImage.setContainerFormat(image.getContainerFormat().toString().toUpperCase());
+    return nfvImage;
+  }
+
   static org.openbaton.catalogue.nfvo.Subnet getSubnet(Subnet subnet) {
     org.openbaton.catalogue.nfvo.Subnet nfvSubnet = new org.openbaton.catalogue.nfvo.Subnet();
     nfvSubnet.setExtId(subnet.getId());
