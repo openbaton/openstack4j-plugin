@@ -22,13 +22,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -234,8 +228,10 @@ public class OpenStack4JDriver extends VimDriver {
       VimInstance vimInstance, Set<VNFDConnectionPoint> networks) throws VimDriverException {
     OSClient os = authenticate(vimInstance);
     List<String> res = new ArrayList<>();
+
     List<? extends org.openstack4j.model.network.Network> networkList =
         os.networking().network().list();
+    Collections.sort(networkList, new NetworkComparator());
 
     Gson gson = new Gson();
     String oldVNFDCP = gson.toJson(networks);
@@ -925,5 +921,17 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public String getType(VimInstance vimInstance) throws VimDriverException {
     return "openstack4j";
+  }
+}
+
+class NetworkComparator implements Comparator<org.openstack4j.model.network.Network> {
+  @Override
+  public int compare(
+      org.openstack4j.model.network.Network network1,
+      org.openstack4j.model.network.Network network2) {
+    if (network1.getId() == network2.getId()) return 0;
+    if (network1.getId() == null) return 1;
+    if (network2.getId() == null) return -1;
+    return network1.getId().compareTo(network2.getId());
   }
 }
