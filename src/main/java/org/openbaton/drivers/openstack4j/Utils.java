@@ -14,6 +14,7 @@ import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.Server;
 import org.openstack4j.model.image.Image;
+import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Subnet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -111,11 +112,11 @@ class Utils {
     return nfvNetwork;
   }
 
-  static Quota getQuota(QuotaSet qs, String tenantId) {
+  static Quota getQuota(QuotaSet qs, NetQuota netQuota, String tenantId) {
     Quota quota = new Quota();
     quota.setTenant(tenantId);
     quota.setCores(qs.getCores());
-    quota.setFloatingIps(qs.getFloatingIps());
+    quota.setFloatingIps(netQuota.getFloatingIP());
     quota.setInstances(qs.getInstances());
     quota.setKeyPairs(qs.getKeyPairs());
     quota.setRam(qs.getRam());

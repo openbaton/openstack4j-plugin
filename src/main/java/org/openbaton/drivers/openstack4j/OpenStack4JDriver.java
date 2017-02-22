@@ -62,6 +62,7 @@ import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.AttachInterfaceType;
 import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.model.network.NetFloatingIP;
+import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Router;
 import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
@@ -916,7 +917,8 @@ public class OpenStack4JDriver extends VimDriver {
   public Quota getQuota(VimInstance vimInstance) throws VimDriverException {
     OSClient os = this.authenticate(vimInstance);
     QuotaSet qs = os.compute().quotaSets().get(vimInstance.getTenant());
-    return Utils.getQuota(qs, vimInstance.getTenant());
+    NetQuota netQuota = os.networking().quotas().get(vimInstance.getTenant());
+    return Utils.getQuota(qs, netQuota, vimInstance.getTenant());
   }
 
   @Override
