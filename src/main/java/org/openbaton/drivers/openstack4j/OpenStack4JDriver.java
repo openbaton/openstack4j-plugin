@@ -242,6 +242,7 @@ public class OpenStack4JDriver extends VimDriver {
 
     List<? extends org.openstack4j.model.network.Network> networkList =
         os.networking().network().list();
+
     Collections.sort(networkList, new NetworkComparator());
 
     Gson gson = new Gson();
@@ -961,16 +962,16 @@ public class OpenStack4JDriver extends VimDriver {
   public String getType(VimInstance vimInstance) throws VimDriverException {
     return "openstack4j";
   }
-}
 
-class NetworkComparator implements Comparator<org.openstack4j.model.network.Network> {
-  @Override
-  public int compare(
-      org.openstack4j.model.network.Network network1,
-      org.openstack4j.model.network.Network network2) {
-    if (network1.getId() == network2.getId()) return 0;
-    if (network1.getId() == null) return 1;
-    if (network2.getId() == null) return -1;
-    return network1.getId().compareTo(network2.getId());
+  private class NetworkComparator implements Comparator<org.openstack4j.model.network.Network> {
+    @Override
+    public int compare(
+        org.openstack4j.model.network.Network network1,
+        org.openstack4j.model.network.Network network2) {
+      if (network1.getId() == network2.getId()) return 0;
+      if (network1.getId() == null) return 1;
+      if (network2.getId() == null) return -1;
+      return network1.getId().compareTo(network2.getId());
+    }
   }
 }
