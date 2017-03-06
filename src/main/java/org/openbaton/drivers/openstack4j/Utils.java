@@ -1,10 +1,5 @@
 package org.openbaton.drivers.openstack4j;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.NFVImage;
 import org.openbaton.catalogue.nfvo.Network;
@@ -18,6 +13,12 @@ import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Subnet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 
 /** Created by lto on 10/01/2017. */
 class Utils {
@@ -69,7 +70,7 @@ class Utils {
     if (server4j.getImage() != null) server.setImage(Utils.getImage(server4j.getImage()));
     else if (server4j.getFlavor() != null) server.setFlavor(Utils.getFlavor(server4j.getFlavor()));
     server.setHypervisorHostName(server4j.getHypervisorHostname());
-    server.setFloatingIps(new HashMap<>());
+    server.setFloatingIps(new HashMap<String, String>());
     //TODO list floating ips
     //server.setFloatingIps();
     return server;
