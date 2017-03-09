@@ -84,10 +84,10 @@ repositories {
     }
 }
 dependencies {
-    compile 'org.openbaton:catalogue:' + obVersion
-    compile 'org.openbaton:monitoring:' + obVersion
-    compile 'org.openbaton:vim-drivers:' + obVersion
-    compile 'org.openbaton:exception:' + obVersion
+    compile 'org.openbaton:catalogue:' + obSnapshotVersion
+    compile 'org.openbaton:monitoring:' + obSnapshotVersion
+    compile 'org.openbaton:vim-drivers:' + obSnapshotVersion
+    compile 'org.openbaton:exception:' + obSnapshotVersion
     compile 'org.openbaton:plugin-sdk:' + obSnapshotVersion
 
     compile 'org.apache.jclouds.labs:openstack-glance:2.0.0'
