@@ -3,5 +3,7 @@ vim.instance.name = test
 vim.instance.username = test
 vim.instance.password = test
 vim.instance.url = http://127.0.0.1/identity/v3
+# if you are using V3 openstack API, please set the project id in the  project.id property
 vim.instance.project.id = testid
+# if you are using V2 openstack API, please set the tenant name in the project.name property
 vim.instance.project.name = test
