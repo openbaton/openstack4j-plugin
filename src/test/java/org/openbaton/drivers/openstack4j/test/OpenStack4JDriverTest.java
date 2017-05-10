@@ -1,5 +1,18 @@
 package org.openbaton.drivers.openstack4j.test;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -15,16 +28,6 @@ import org.openstack4j.api.OSClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-
 /** Created by lto on 11/01/2017. */
 public class OpenStack4JDriverTest {
   private static Properties properties;
@@ -36,9 +39,13 @@ public class OpenStack4JDriverTest {
   public static void init() throws IOException {
     properties = new Properties();
     try {
-      properties.load(
-          new InputStreamReader(
-              OpenStack4JDriverTest.class.getResourceAsStream("/test.properties")));
+      InputStream resourceAsStream = null;
+      try {
+        resourceAsStream = OpenStack4JDriverTest.class.getResourceAsStream("/test.properties");
+      } catch (NullPointerException e) {
+        log.warn("test.properties not found, using default values");
+      }
+      if (resourceAsStream != null) properties.load(new InputStreamReader(resourceAsStream));
     } catch (IOException e) {
       log.error("Missing 'test.properties' file, please use test.properties.default to create it");
     }
@@ -106,7 +113,7 @@ public class OpenStack4JDriverTest {
 
   @Test
   @Ignore
-  public void launchInstanceAndWait() throws VimDriverException {
+  public void launchInstanceAndWait() throws VimDriverException, IOException {
 
     Map<String, String> fips = new HashMap<>();
     List<String> networksNames =
@@ -125,6 +132,16 @@ public class OpenStack4JDriverTest {
       connectionPoints.add(cp);
     }
 
+    String userdata = "";
+
+    File userdataFilePath =
+        new File(
+            properties.getProperty(
+                "vim.instance.userdata.path", "/etc/openbaton/openstack4j-test/userdata.sh"));
+    if (userdataFilePath.exists()) {
+      userdata = new String(Files.readAllBytes(Paths.get(userdataFilePath.getAbsolutePath())));
+    }
+
     Server server =
         osd.launchInstanceAndWait(
             vimInstance,
@@ -138,7 +155,7 @@ public class OpenStack4JDriverTest {
                     properties
                         .getProperty("vim.instance.securitygroups.names", "default")
                         .split(";"))),
-            null,
+            userdata,
             fips,
             null);
 
