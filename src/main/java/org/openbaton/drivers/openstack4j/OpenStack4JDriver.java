@@ -18,21 +18,7 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -72,6 +58,22 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -462,9 +464,10 @@ public class OpenStack4JDriver extends VimDriver {
     String tenantId = null;
     if (os.supportsIdentity()) {
       if (os instanceof OSClient.OSClientV2) {
+        List<? extends Tenant> tenants = ((OSClient.OSClientV2) os).identity().tenants().list();
         log.trace(
-            "Available tenants (v2): " + ((OSClient.OSClientV2) os).identity().tenants().list());
-        for (Tenant currentTenant : ((OSClient.OSClientV2) os).identity().tenants().list()) {
+            "Available tenants (v2): " + tenants);
+        for (Tenant currentTenant : tenants) {
           if (currentTenant.getName().equals(tenantName)) {
             tenantId = currentTenant.getId();
             break;
@@ -540,6 +543,8 @@ public class OpenStack4JDriver extends VimDriver {
     if (keys != null && !keys.isEmpty()) {
       userdata = addKeysToUserData(userdata, keys);
     }
+    if (userdata == null)
+      userdata = "";
     log.trace("Userdata: " + userdata);
 
     Server server =
