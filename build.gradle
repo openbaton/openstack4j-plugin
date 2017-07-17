@@ -65,7 +65,7 @@ project.ext {
      * gradle Related Vars
      */
     mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
-    obVersion = '3.2.1'
+    obVersion = '3.2.3-SNAPSHOT'
     //------------------------------------------------//
 }
 
@@ -74,6 +74,7 @@ apply from: 'gradle/gradle/run.application.java.gradle'
 apply from: 'gradle/gradle/git.release.gradle'
 
 repositories {
+    mavenLocal()
     mavenCentral()
     maven {
         url "https://oss.sonatype.org/content/repositories/snapshots/"

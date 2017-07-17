@@ -92,10 +92,11 @@ class Utils {
     nfvImage.setIsPublic(image.isPublic());
     nfvImage.setDiskFormat(image.getDiskFormat().toString().toUpperCase());
     nfvImage.setContainerFormat(image.getContainerFormat().toString().toUpperCase());
+    nfvImage.setStatus(image.getStatus().value());
     return nfvImage;
   }
 
-  public static NFVImage getImageV2(org.openstack4j.model.image.v2.Image image) {
+  static NFVImage getImageV2(org.openstack4j.model.image.v2.Image image) {
     NFVImage nfvImage = new NFVImage();
     nfvImage.setName(image.getName());
     nfvImage.setExtId(image.getId());
@@ -106,6 +107,7 @@ class Utils {
     nfvImage.setIsPublic(!image.getIsProtected());
     nfvImage.setDiskFormat(image.getDiskFormat().toString().toUpperCase());
     nfvImage.setContainerFormat(image.getContainerFormat().toString().toUpperCase());
+    nfvImage.setStatus(String.valueOf(image.getStatus()));
     return nfvImage;
   }
 
