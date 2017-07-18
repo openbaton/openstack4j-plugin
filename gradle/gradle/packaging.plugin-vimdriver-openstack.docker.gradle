@@ -30,7 +30,10 @@ task buildDocker(type: Docker) {
         rename {"${componentName}.jar"}
     }
     runCommand('mkdir -p /var/log/openbaton')
-    entryPoint(["sh", "-c", "java -jar /${componentName}.jar openstack4j \$RABBITMQ \$RABBITMQ_PORT 3"])
+    setEnvironment('RABBITMQ', 'localhost')
+    setEnvironment('RABBITMQ_PORT', '5672')
+    setEnvironment('CONSUMERS', '3')
+    entryPoint(["sh", "-c", "java -jar /${componentName}.jar openstack4j \$RABBITMQ \$RABBITMQ_PORT \$CONSUMERS"])
 }
 
 buildDocker.dependsOn(build)
