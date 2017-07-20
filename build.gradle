@@ -19,6 +19,7 @@ buildscript {
     }
     dependencies {
         classpath 'com.bmuschko:gradle-nexus-plugin:2.3.1'
+        classpath 'se.transmode.gradle:gradle-docker:1.2'
     }
 }
 plugins {
@@ -29,6 +30,7 @@ plugins {
 
 apply plugin: 'java'
 apply plugin: 'idea'
+apply plugin: 'docker'
 apply plugin: 'eclipse'
 apply plugin: 'jacoco'
 
@@ -109,6 +111,7 @@ dependencies {
 }
 
 apply from: 'gradle/gradle/packaging.plugin-vimdriver-openstack.debian.gradle'
+apply from: 'gradle/gradle/packaging.plugin-vimdriver-openstack.docker.gradle'
 compileJava.dependsOn tasks.googleJavaFormat
 
 
