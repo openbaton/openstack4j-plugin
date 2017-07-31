@@ -67,7 +67,7 @@ project.ext {
      * gradle Related Vars
      */
     mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
-    obVersion = '4.0.0'
+    obVersion = '4.0.1-SNAPSHOT'
     //------------------------------------------------//
 }
 
