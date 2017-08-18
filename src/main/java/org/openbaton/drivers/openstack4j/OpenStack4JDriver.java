@@ -279,21 +279,24 @@ public class OpenStack4JDriver extends VimDriver {
     return server;
   }
 
-  private Set<VNFDConnectionPoint> sortAndFixVNFDConnectionPoint(Set<VNFDConnectionPoint> networks) {
-//    Collections.sort(networkList, new NetworkComparator());
+  private Set<VNFDConnectionPoint> sortAndFixVNFDConnectionPoint(
+      Set<VNFDConnectionPoint> networks) {
+    //    Collections.sort(networkList, new NetworkComparator());
 
     Gson gson = new Gson();
     String oldVNFDCP = gson.toJson(networks);
-    Set<VNFDConnectionPoint> newNetworks = gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {
-    }.getType());
+    Set<VNFDConnectionPoint> newNetworks =
+        gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
 
     VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
-    Arrays.sort(vnfdConnectionPoints, new Comparator<VNFDConnectionPoint>() {
-      @Override
-      public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
-        return o1.getInterfaceId() - o2.getInterfaceId();
-      }
-    });
+    Arrays.sort(
+        vnfdConnectionPoints,
+        new Comparator<VNFDConnectionPoint>() {
+          @Override
+          public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
+            return o1.getInterfaceId() - o2.getInterfaceId();
+          }
+        });
     return newNetworks;
   }
 
@@ -641,13 +644,14 @@ public class OpenStack4JDriver extends VimDriver {
           log.error(
               "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
           log.debug("Getting the pool name of a floating ip pool");
-          for (Map.Entry<String, String> entry : floatingIps.entrySet()){
+          for (Map.Entry<String, String> entry : floatingIps.entrySet()) {
             for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
               String poolName;
-              if (vnfdConnectionPoint.getChosenPool() != null && !vnfdConnectionPoint.getChosenPool().equals("") && entry.getKey().equals(vnfdConnectionPoint.getVirtual_link_reference()))
+              if (vnfdConnectionPoint.getChosenPool() != null
+                  && !vnfdConnectionPoint.getChosenPool().equals("")
+                  && entry.getKey().equals(vnfdConnectionPoint.getVirtual_link_reference()))
                 poolName = vnfdConnectionPoint.getChosenPool();
-              else
-                poolName = getIpPoolName(vimInstance);
+              else poolName = getIpPoolName(vimInstance);
               allocateFloatingIps(vimInstance, poolName, ipsNeeded - freeIps);
             }
           }
