@@ -18,21 +18,7 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -72,6 +58,21 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -189,12 +190,13 @@ public class OpenStack4JDriver extends VimDriver {
     Server server = null;
     try {
       OSClient os = this.authenticate(vimInstance);
+
       List<String> networks = getNetworkIdsFromNames(vimInstance, network);
 
       String imageId = getImageIdFromName(vimInstance, image);
       log.debug("imageId: " + imageId);
       org.openstack4j.model.image.Image imageFromVim = os.images().get(imageId);
-      log.debug("Image received from VIM: " + imageFromVim);
+      log.trace("Image received from VIM: " + imageFromVim);
       if (imageFromVim == null) {
         throw new VimException("Not found image " + image + " on VIM " + vimInstance.getName());
       } else if (imageFromVim.getStatus() == null
@@ -205,6 +207,23 @@ public class OpenStack4JDriver extends VimDriver {
       flavor = flavor4j.getId();
       // temporary workaround for getting first security group as it seems not supported adding multiple security groups
       ServerCreate sc;
+      //      List<String> ports = new ArrayList<>();
+      //      for (VNFDConnectionPoint vnfdConnectionPoint : network) {
+      //        Network
+      //            networkByName =
+      //            getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id());
+      //        ports.add(os.networking()
+      //                    .port()
+      //                    .create(Builders.port()
+      //                                    .name(vnfdConnectionPoint.getVirtual_link_reference() + "_port")
+      //                                    .networkId(networkByName.getId())
+      //                                    .fixedIp(vnfdConnectionPoint.getFixedIp(), networkByName.getSubnets().iterator().next().getExtId())
+      //                                    .build())
+      //                    .getId());
+      //      }
+
+
+
       if (keypair == null || keypair.equals("")) {
         sc =
             Builders.server()
@@ -226,6 +245,16 @@ public class OpenStack4JDriver extends VimDriver {
                 .build();
       }
 
+      for (VNFDConnectionPoint vnfdConnectionPoint : network) {
+        if (vnfdConnectionPoint.getFixedIp() != null
+            && !vnfdConnectionPoint.getFixedIp().equals("")) {
+          sc.addNetwork(
+              getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id())
+                  .getExtId(),
+              vnfdConnectionPoint.getFixedIp());
+        }
+      }
+
       for (String sg : secGroup) {
         sc.addSecurityGroup(sg);
       }
@@ -240,7 +269,7 @@ public class OpenStack4JDriver extends VimDriver {
               + ", flavorId: "
               + flavor
               + ", networks: "
-              + network);
+              + networks);
       org.openstack4j.model.compute.Server server4j = os.compute().servers().boot(sc);
       server = Utils.getServer(server4j);
     } catch (Exception e) {
@@ -252,26 +281,9 @@ public class OpenStack4JDriver extends VimDriver {
     return server;
   }
 
-  private Flavor getFlavorFromName(VimInstance vimInstance, String flavor)
-      throws VimDriverException {
-    OSClient os = authenticate(vimInstance);
-    for (Flavor flavor4j : os.compute().flavors().list()) {
-      if (flavor4j.getName().equals(flavor) || flavor4j.getId().equals(flavor)) {
-        return flavor4j;
-      }
-    }
-    throw new VimDriverException("Flavor with name " + flavor + " was not found");
-  }
-
-  private List<String> getNetworkIdsFromNames(
-      VimInstance vimInstance, Set<VNFDConnectionPoint> networks) throws VimDriverException {
-    OSClient os = authenticate(vimInstance);
-    List<String> res = new ArrayList<>();
-
-    List<? extends org.openstack4j.model.network.Network> networkList =
-        os.networking().network().list();
-
-    Collections.sort(networkList, new NetworkComparator());
+  private Set<VNFDConnectionPoint> sortAndFixVNFDConnectionPoint(
+      Set<VNFDConnectionPoint> networks) {
+    //    Collections.sort(networkList, new NetworkComparator());
 
     Gson gson = new Gson();
     String oldVNFDCP = gson.toJson(networks);
@@ -287,33 +299,77 @@ public class OpenStack4JDriver extends VimDriver {
             return o1.getInterfaceId() - o2.getInterfaceId();
           }
         });
+    return newNetworks;
+  }
 
-    String tenantId =
-        isV3API(vimInstance)
-            ? vimInstance.getTenant()
-            : getTenantFromName(os, vimInstance.getTenant());
-    for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
-      boolean networkExists = false;
-      for (org.openstack4j.model.network.Network network4j : networkList) {
-        log.trace("Network " + network4j.getName() + " is shared? " + network4j.isShared());
-        if ((vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getName())
-                || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId()))
-            && (network4j.getTenantId().equals(tenantId) || network4j.isShared())) {
-          if (!res.contains(network4j.getId())) {
-            res.add(network4j.getId());
-            networkExists = true;
-            break;
-          }
-        }
-      }
-      if (!networkExists) {
-        throw new VimDriverException(
-            "Not found Network '"
-                + vnfdConnectionPoint.getVirtual_link_reference()
-                + "'. Consider to refresh the VIM manually and try again ...");
+  private Flavor getFlavorFromName(VimInstance vimInstance, String flavor)
+      throws VimDriverException {
+    OSClient os = authenticate(vimInstance);
+    for (Flavor flavor4j : os.compute().flavors().list()) {
+      if (flavor4j.getName().equals(flavor) || flavor4j.getId().equals(flavor)) {
+        return flavor4j;
       }
     }
-    log.debug("result " + res);
+    throw new VimDriverException("Flavor with name " + flavor + " was not found");
+  }
+
+  private List<String> getNetworkIdsFromNames(
+      VimInstance vimInstance, Set<VNFDConnectionPoint> networks) throws VimDriverException {
+    //    OSClient os = authenticate(vimInstance);
+    List<String> res = new ArrayList<>();
+    //
+    //    List<? extends org.openstack4j.model.network.Network> networkList =
+    //        os.networking().network().list();
+    //
+    //    Collections.sort(networkList, new NetworkComparator());
+    //
+    //    Gson gson = new Gson();
+    //    String oldVNFDCP = gson.toJson(networks);
+    //    Set<VNFDConnectionPoint> newNetworks =
+    //        gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
+    //
+    //    VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
+    //    Arrays.sort(
+    //        vnfdConnectionPoints,
+    //        new Comparator<VNFDConnectionPoint>() {
+    //          @Override
+    //          public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
+    //            return o1.getInterfaceId() - o2.getInterfaceId();
+    //          }
+    //        });
+    //
+    //    String tenantId =
+    //        isV3API(vimInstance)
+    //            ? vimInstance.getTenant()
+    //            : getTenantFromName(os, vimInstance.getTenant());
+    //    for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
+    //      boolean networkExists = false;
+    //      for (org.openstack4j.model.network.Network network4j : networkList) {
+    //        log.trace("Network " + network4j.getName() + " is shared? " + network4j.isShared());
+    //        if ((vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getName())
+    //                || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId()))
+    //            && (network4j.getTenantId().equals(tenantId) || network4j.isShared())) {
+    //          if (!res.contains(network4j.getId())) {
+    //            res.add(network4j.getId());
+    //            networkExists = true;
+    //            break;
+    //          }
+    //        }
+    //      }
+    //      if (!networkExists) {
+    //        throw new VimDriverException(
+    //            "Not found Network '"
+    //                + vnfdConnectionPoint.getVirtual_link_reference()
+    //                + "'. Consider to refresh the VIM manually and try again ...");
+    //      }
+    //    }
+    //    log.debug("result " + res);
+    for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
+      if (vnfdConnectionPoint.getFixedIp() == null || vnfdConnectionPoint.getFixedIp().equals("")) {
+        res.add(vnfdConnectionPoint.getVirtual_link_reference_id());
+      }
+    }
+    log.debug("Found external network id without fixed ip: " + res);
     return res;
   }
 
@@ -535,7 +591,7 @@ public class OpenStack4JDriver extends VimDriver {
       Map<String, String> floatingIps,
       Set<Key> keys)
       throws VimDriverException {
-
+    networks = sortAndFixVNFDConnectionPoint(networks);
     boolean bootCompleted = false;
     if (keys != null && !keys.isEmpty()) {
       userdata = addKeysToUserData(userdata, keys);
@@ -578,7 +634,7 @@ public class OpenStack4JDriver extends VimDriver {
         }
       }
       if (server.getFloatingIps() == null) {
-        server.setFloatingIps(new HashMap<String, String>());
+        server.setFloatingIps(new HashMap<>());
       }
       if (floatingIps != null && floatingIps.size() > 0) {
         OpenStack4JDriver.lock.lock(); // TODO chooseFloating ip is lock but association is parallel
@@ -590,8 +646,17 @@ public class OpenStack4JDriver extends VimDriver {
           log.error(
               "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
           log.debug("Getting the pool name of a floating ip pool");
-          String pool_name = getIpPoolName(vimInstance);
-          allocateFloatingIps(vimInstance, pool_name, ipsNeeded - freeIps);
+          for (Map.Entry<String, String> entry : floatingIps.entrySet()) {
+            for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
+              String poolName;
+              if (vnfdConnectionPoint.getChosenPool() != null
+                  && !vnfdConnectionPoint.getChosenPool().equals("")
+                  && entry.getKey().equals(vnfdConnectionPoint.getVirtual_link_reference()))
+                poolName = vnfdConnectionPoint.getChosenPool();
+              else poolName = getIpPoolName(vimInstance);
+              allocateFloatingIps(vimInstance, poolName, ipsNeeded - freeIps);
+            }
+          }
         }
         if (listFloatingIps(this.authenticate(vimInstance), vimInstance).size()
             >= floatingIps.size()) {
