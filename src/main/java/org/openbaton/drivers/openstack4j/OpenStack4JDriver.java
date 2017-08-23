@@ -222,8 +222,6 @@ public class OpenStack4JDriver extends VimDriver {
       //                    .getId());
       //      }
 
-
-
       if (keypair == null || keypair.equals("")) {
         sc =
             Builders.server()
