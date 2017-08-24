@@ -33,6 +33,7 @@ import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -96,8 +97,16 @@ public class OpenStack4JDriver extends VimDriver {
     try {
       if (isV3API(vimInstance)) {
 
-        Identifier domain = Identifier.byName("Default");
+        Identifier domain = Identifier.byName("default");
         Identifier project = Identifier.byId(vimInstance.getTenant());
+
+        String[] domainProjectSplit = vimInstance.getTenant().split(Pattern.quote(":"));
+        if (domainProjectSplit.length == 2) {
+          log.trace("Found domain name and project id: " + domainProjectSplit);
+          domain = Identifier.byName(domainProjectSplit[0]);
+          project = Identifier.byId(domainProjectSplit[1]);
+        }
+
         log.trace("Domain id: " + domain.getId());
         log.trace("Project id: " + project.getId());
 
