@@ -18,7 +18,21 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -59,21 +73,6 @@ import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
 
@@ -99,6 +98,14 @@ public class OpenStack4JDriver extends VimDriver {
 
         Identifier domain = Identifier.byName("Default");
         Identifier project = Identifier.byId(vimInstance.getTenant());
+
+        String[] domainProjectSplit = vimInstance.getTenant().split(Pattern.quote(":"));
+        if (domainProjectSplit.length == 2) {
+          log.trace("Found domain name and project id: " + domainProjectSplit);
+          domain = Identifier.byName(domainProjectSplit[0]);
+          project = Identifier.byId(domainProjectSplit[1]);
+        }
+
         log.trace("Domain id: " + domain.getId());
         log.trace("Project id: " + project.getId());
 
@@ -207,21 +214,6 @@ public class OpenStack4JDriver extends VimDriver {
       flavor = flavor4j.getId();
       // temporary workaround for getting first security group as it seems not supported adding multiple security groups
       ServerCreate sc;
-      //      List<String> ports = new ArrayList<>();
-      //      for (VNFDConnectionPoint vnfdConnectionPoint : network) {
-      //        Network
-      //            networkByName =
-      //            getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id());
-      //        ports.add(os.networking()
-      //                    .port()
-      //                    .create(Builders.port()
-      //                                    .name(vnfdConnectionPoint.getVirtual_link_reference() + "_port")
-      //                                    .networkId(networkByName.getId())
-      //                                    .fixedIp(vnfdConnectionPoint.getFixedIp(), networkByName.getSubnets().iterator().next().getExtId())
-      //                                    .build())
-      //                    .getId());
-      //      }
-
       if (keypair == null || keypair.equals("")) {
         sc =
             Builders.server()
