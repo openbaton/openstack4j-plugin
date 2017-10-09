@@ -223,14 +223,20 @@ public class OpenStack4JDriver extends VimDriver {
 
       ServerCreate sc;
       // name, flavor, imageId, user-data and network are mandatory
-      ServerCreateBuilder serverCreateBuilder = Builders.server().name(name).flavor(flavor).image(imageId).networks(networks).userData(new String(Base64.encodeBase64(userData.getBytes())));
+      ServerCreateBuilder serverCreateBuilder =
+          Builders.server()
+              .name(name)
+              .flavor(flavor)
+              .image(imageId)
+              .networks(networks)
+              .userData(new String(Base64.encodeBase64(userData.getBytes())));
 
       // check if keypair is not null and is not equal empty string
       if (keypair != null && !keypair.equals("")) {
         serverCreateBuilder.keypairName(keypair);
       }
 
-      if (!availabilityZone.isEmpty()){
+      if (!availabilityZone.isEmpty()) {
         serverCreateBuilder.availabilityZone(availabilityZone);
       }
 
@@ -266,7 +272,11 @@ public class OpenStack4JDriver extends VimDriver {
   private String getZone(OSClient os, VimInstance vimInstance) throws Exception {
     List<? extends AvailabilityZone> availabilityZones = os.compute().zones().list();
     for (AvailabilityZone availabilityZone : availabilityZones) {
-      log.debug("Looking for availability zone with name: "+vimInstance.getLocation().getName()+". Found availability zone with name: "+availabilityZone.getZoneName());
+      log.debug(
+          "Looking for availability zone with name: "
+              + vimInstance.getLocation().getName()
+              + ". Found availability zone with name: "
+              + availabilityZone.getZoneName());
       if (availabilityZone.getZoneName().equals(vimInstance.getLocation().getName()))
         return availabilityZone.getZoneName();
     }
