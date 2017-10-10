@@ -60,6 +60,8 @@ import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.ServerCreate;
+import org.openstack4j.model.compute.builder.ServerCreateBuilder;
+import org.openstack4j.model.compute.ext.AvailabilityZone;
 import org.openstack4j.model.identity.v2.Tenant;
 import org.openstack4j.model.identity.v3.Project;
 import org.openstack4j.model.identity.v3.Region;
@@ -212,32 +214,38 @@ public class OpenStack4JDriver extends VimDriver {
       }
       Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
       flavor = flavor4j.getId();
-      // temporary workaround for getting first security group as it seems not supported adding multiple security groups
-      ServerCreate sc;
-      if (keypair == null || keypair.equals("")) {
-        sc =
-            Builders.server()
-                .name(name)
-                .flavor(flavor)
-                .image(imageId)
-                .networks(networks)
-                .userData(new String(Base64.encodeBase64(userData.getBytes())))
-                .build();
-      } else {
-        sc =
-            Builders.server()
-                .name(name)
-                .flavor(flavor)
-                .image(imageId)
-                .keypairName(keypair)
-                .networks(networks)
-                .userData(new String(Base64.encodeBase64(userData.getBytes())))
-                .build();
+      String availabilityZone = "";
+      try {
+        availabilityZone = getZone(os, vimInstance);
+      } catch (Exception e) {
+        log.warn(e.getMessage());
       }
 
-      for (String sg : secGroup) {
-        sc.addSecurityGroup(sg);
+      ServerCreate sc;
+      // name, flavor, imageId, user-data and network are mandatory
+      ServerCreateBuilder serverCreateBuilder =
+          Builders.server()
+              .name(name)
+              .flavor(flavor)
+              .image(imageId)
+              .networks(networks)
+              .userData(new String(Base64.encodeBase64(userData.getBytes())));
+
+      // check if keypair is not null and is not equal empty string
+      if (keypair != null && !keypair.equals("")) {
+        serverCreateBuilder.keypairName(keypair);
       }
+
+      if (!availabilityZone.isEmpty()) {
+        serverCreateBuilder.availabilityZone(availabilityZone);
+      }
+
+      // temporary workaround for getting first security group as it seems not supported adding multiple security groups
+      for (String sg : secGroup) {
+        serverCreateBuilder.addSecurityGroup(sg);
+      }
+      // createing ServerCreate object
+      sc = serverCreateBuilder.build();
 
       log.debug(
           "Keypair: "
@@ -259,6 +267,23 @@ public class OpenStack4JDriver extends VimDriver {
       throw vimDriverException;
     }
     return server;
+  }
+
+  private String getZone(OSClient os, VimInstance vimInstance) throws Exception {
+    List<? extends AvailabilityZone> availabilityZones = os.compute().zones().list();
+    for (AvailabilityZone availabilityZone : availabilityZones) {
+      log.debug(
+          "Looking for availability zone with name: "
+              + vimInstance.getLocation().getName()
+              + ". Found availability zone with name: "
+              + availabilityZone.getZoneName());
+      if (availabilityZone.getZoneName().equals(vimInstance.getLocation().getName()))
+        return availabilityZone.getZoneName();
+    }
+    throw new Exception(
+        "Specified Availability Zone "
+            + vimInstance.getName()
+            + " not found, using the default one");
   }
 
   private Flavor getFlavorFromName(VimInstance vimInstance, String flavor)
