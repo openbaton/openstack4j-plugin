@@ -90,7 +90,7 @@ dependencies {
 
     compile 'org.apache.jclouds.labs:openstack-glance:2.0.0'
 
-    compile group: 'org.pacesys', name: 'openstack4j', version: '3.0.3'
+    compile group: 'org.pacesys', name: 'openstack4j', version: '3.0.4'
 
 
     // https://mvnrepository.com/artifact/commons-net/commons-net
