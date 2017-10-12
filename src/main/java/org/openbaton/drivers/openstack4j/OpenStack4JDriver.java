@@ -18,21 +18,7 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
+
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -74,6 +60,22 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -893,13 +895,8 @@ public class OpenStack4JDriver extends VimDriver {
                 Builders.network()
                     .name(network.getName())
                     .adminStateUp(true)
-                    .isShared(network.getShared())
+                    .isShared(network.getExtShared())
                     .build());
-    //    for (Subnet subnet : network.getSubnets()) {
-    //      Subnet sn = createSubnet(vimInstance, res, subnet);
-    //      res.getSubnets().add(sn);
-    //
-    //    }
     return Utils.getNetwork(network4j);
   }
 
@@ -1021,17 +1018,14 @@ public class OpenStack4JDriver extends VimDriver {
 
     Thread t =
         new Thread(
-            new Runnable() {
-              @Override
-              public void run() {
-                OSClient os = null;
-                try {
-                  os = authenticate(vimInstance);
-                } catch (VimDriverException e) {
-                  e.printStackTrace();
-                }
-                ActionResponse upload = os.imagesV2().upload(imageV2.getId(), payload, imageV2);
+            () -> {
+              OSClient os1 = null;
+              try {
+                os1 = authenticate(vimInstance);
+              } catch (VimDriverException e) {
+                e.printStackTrace();
               }
+              ActionResponse upload = os1.imagesV2().upload(imageV2.getId(), payload, imageV2);
             });
 
     t.start();
