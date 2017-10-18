@@ -18,7 +18,21 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -37,6 +51,7 @@ import org.openbaton.vim.drivers.interfaces.VimDriver;
 import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient;
 import org.openstack4j.api.exceptions.AuthenticationException;
+import org.openstack4j.core.transport.Config;
 import org.openstack4j.model.common.ActionResponse;
 import org.openstack4j.model.common.Identifier;
 import org.openstack4j.model.common.Payload;
@@ -61,22 +76,6 @@ import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
-
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
 
@@ -97,6 +96,9 @@ public class OpenStack4JDriver extends VimDriver {
   public OSClient authenticate(VimInstance vimInstance) throws VimDriverException {
 
     OSClient os;
+    Config cfg = Config.newConfig();
+    cfg.withConnectionTimeout(
+        Integer.parseInt(properties.getProperty("connection-timeout", "10000")));
     try {
       if (isV3API(vimInstance)) {
 
@@ -118,6 +120,7 @@ public class OpenStack4JDriver extends VimDriver {
                 .endpoint(vimInstance.getAuthUrl())
                 .scopeToProject(project)
                 .credentials(vimInstance.getUsername(), vimInstance.getPassword(), domain)
+                .withConfig(cfg)
                 .authenticate();
         if (vimInstance.getLocation() != null
             && vimInstance.getLocation().getName() != null
@@ -146,6 +149,7 @@ public class OpenStack4JDriver extends VimDriver {
                 .endpoint(vimInstance.getAuthUrl())
                 .credentials(vimInstance.getUsername(), vimInstance.getPassword())
                 .tenantName(vimInstance.getTenant())
+                .withConfig(cfg)
                 .authenticate();
         if (vimInstance.getLocation() != null
             && vimInstance.getLocation().getName() != null
@@ -165,6 +169,7 @@ public class OpenStack4JDriver extends VimDriver {
     } catch (AuthenticationException e) {
       throw new VimDriverException(e.getMessage(), e);
     }
+
     return os;
   }
 
