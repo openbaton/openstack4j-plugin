@@ -18,21 +18,7 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
+
 import org.apache.commons.codec.binary.Base64;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
@@ -76,6 +62,23 @@ import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
+
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
 
@@ -87,7 +90,7 @@ public class OpenStack4JDriver extends VimDriver {
     init();
   }
 
-  public void init() {
+  private void init() {
     String sslChecksDisabled = properties.getProperty("disable-ssl-certificate-checks", "false");
     log.debug("Disable SSL certificate checks: {}", sslChecksDisabled);
     OpenStack4JDriver.lock = new ReentrantLock();
@@ -107,7 +110,7 @@ public class OpenStack4JDriver extends VimDriver {
 
         String[] domainProjectSplit = vimInstance.getTenant().split(Pattern.quote(":"));
         if (domainProjectSplit.length == 2) {
-          log.trace("Found domain name and project id: " + domainProjectSplit);
+          log.trace("Found domain name and project id: " + Arrays.toString(domainProjectSplit));
           domain = Identifier.byName(domainProjectSplit[0]);
           project = Identifier.byId(domainProjectSplit[1]);
         }
@@ -308,25 +311,22 @@ public class OpenStack4JDriver extends VimDriver {
             + " not found, using the default one");
   }
 
-  private Set<VNFDConnectionPoint> sortAndFixVNFDConnectionPoint(
-      Set<VNFDConnectionPoint> networks) {
+  private Set<VNFDConnectionPoint> fixVNFDConnectionPoint(Set<VNFDConnectionPoint> networks) {
     //    Collections.sort(networkList, new NetworkComparator());
 
     Gson gson = new Gson();
     String oldVNFDCP = gson.toJson(networks);
-    Set<VNFDConnectionPoint> newNetworks =
-        gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
 
-    VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
-    Arrays.sort(
-        vnfdConnectionPoints,
-        new Comparator<VNFDConnectionPoint>() {
-          @Override
-          public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
-            return o1.getInterfaceId() - o2.getInterfaceId();
-          }
-        });
-    return newNetworks;
+    //    VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
+    //    Arrays.sort(
+    //        vnfdConnectionPoints,
+    //        new Comparator<VNFDConnectionPoint>() {
+    //          @Override
+    //          public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
+    //            return o1.getInterfaceId() - o2.getInterfaceId();
+    //          }
+    //        });
+    return gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
   }
 
   private Flavor getFlavorFromName(VimInstance vimInstance, String flavor)
@@ -344,7 +344,7 @@ public class OpenStack4JDriver extends VimDriver {
       OSClient os, VimInstance vimInstance, Set<VNFDConnectionPoint> networks)
       throws VimDriverException {
     //    OSClient os = authenticate(vimInstance);
-    List<String> res = new ArrayList<>();
+    List<String> res = new LinkedList<>();
     //
     //    List<? extends org.openstack4j.model.network.Network> networkList =
     //        os.networking().network().list();
@@ -392,7 +392,12 @@ public class OpenStack4JDriver extends VimDriver {
     //      }
     //    }
     //    log.debug("result " + res);
-    for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
+
+    List<VNFDConnectionPoint> vnfdConnectionPoints = new ArrayList<>();
+    vnfdConnectionPoints.addAll(networks);
+    vnfdConnectionPoints.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
+
+    for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
       if (vnfdConnectionPoint.getFixedIp() == null || vnfdConnectionPoint.getFixedIp().equals("")) {
         if (vnfdConnectionPoint.getVirtual_link_reference_id() != null
             && !vnfdConnectionPoint.getVirtual_link_reference_id().equals("")) {
@@ -656,7 +661,7 @@ public class OpenStack4JDriver extends VimDriver {
       Map<String, String> floatingIps,
       Set<Key> keys)
       throws VimDriverException {
-    networks = sortAndFixVNFDConnectionPoint(networks);
+    networks = fixVNFDConnectionPoint(networks);
     boolean bootCompleted = false;
     if (keys != null && !keys.isEmpty()) {
       userdata = addKeysToUserData(userdata, keys);
@@ -749,9 +754,7 @@ public class OpenStack4JDriver extends VimDriver {
                   "Cannot assign FloatingIPs to VM with hostname: "
                       + name
                       + ". No FloatingIPs left...");
-          if (server != null) {
-            exception.setServer(server);
-          }
+          exception.setServer(server);
           throw exception;
         }
         OpenStack4JDriver.lock.unlock();
@@ -862,17 +865,19 @@ public class OpenStack4JDriver extends VimDriver {
     log.debug("Going to add all keys: " + keys.size());
     userData += "\n";
     userData += "for x in `find /home/ -name authorized_keys`; do\n";
-    /** doing this for avoiding a serialization error of gson */
+    /* doing this for avoiding a serialization error of gson */
     Gson gson = new Gson();
     String oldKeys = gson.toJson(keys);
     Set<org.openbaton.catalogue.security.Key> keysSet =
         gson.fromJson(
             oldKeys, new TypeToken<Set<org.openbaton.catalogue.security.Key>>() {}.getType());
 
+    StringBuilder userDataBuilder = new StringBuilder(userData);
     for (org.openbaton.catalogue.security.Key key : keysSet) {
       log.debug("Adding key: " + key.getName());
-      userData += "\techo \"" + key.getPublicKey() + "\" >> $x\n";
+      userDataBuilder.append("\techo \"").append(key.getPublicKey()).append("\" >> $x\n");
     }
+    userData = userDataBuilder.toString();
     userData += "done\n";
     return userData;
   }
@@ -881,7 +886,7 @@ public class OpenStack4JDriver extends VimDriver {
   public void deleteServerByIdAndWait(VimInstance vimInstance, String id)
       throws VimDriverException {
     OSClient os = this.authenticate(vimInstance);
-    /** I suppose that checking for the result waits also for the effectivness of the operation */
+    /* I suppose that checking for the result waits also for the effectivness of the operation */
     log.info(
         "Deleting VM with id "
             + id
@@ -917,7 +922,7 @@ public class OpenStack4JDriver extends VimDriver {
       }
     }
     RouterInterface iface;
-    if (routers != null && !routers.isEmpty()) {
+    if (!routers.isEmpty()) {
       Router router = routers.get(0);
       iface =
           os.networking()
@@ -1024,13 +1029,16 @@ public class OpenStack4JDriver extends VimDriver {
     Thread t =
         new Thread(
             () -> {
-              OSClient os1 = null;
+              OSClient os1;
               try {
                 os1 = authenticate(vimInstance);
+                ActionResponse upload = os1.imagesV2().upload(imageV2.getId(), payload, imageV2);
+                if (!upload.isSuccess()) {
+                  throw new VimDriverException("Error uploading image: " + upload.getFault());
+                }
               } catch (VimDriverException e) {
                 e.printStackTrace();
               }
-              ActionResponse upload = os1.imagesV2().upload(imageV2.getId(), payload, imageV2);
             });
 
     t.start();
@@ -1146,24 +1154,24 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public String getType(VimInstance vimInstance) throws VimDriverException {
-    return "openstack4j";
+    return "openstack";
   }
 
-  private class NetworkComparator implements Comparator<org.openstack4j.model.network.Network> {
-    @Override
-    public int compare(
-        org.openstack4j.model.network.Network network1,
-        org.openstack4j.model.network.Network network2) {
-      if (network1.getId() == network2.getId()) {
-        return 0;
-      }
-      if (network1.getId() == null) {
-        return 1;
-      }
-      if (network2.getId() == null) {
-        return -1;
-      }
-      return network1.getId().compareTo(network2.getId());
-    }
-  }
+  //  private class NetworkComparator implements Comparator<org.openstack4j.model.network.Network> {
+  //    @Override
+  //    public int compare(
+  //        org.openstack4j.model.network.Network network1,
+  //        org.openstack4j.model.network.Network network2) {
+  //      if (Objects.equals(network1.getId(), network2.getId())) {
+  //        return 0;
+  //      }
+  //      if (network1.getId() == null) {
+  //        return 1;
+  //      }
+  //      if (network2.getId() == null) {
+  //        return -1;
+  //      }
+  //      return network1.getId().compareTo(network2.getId());
+  //    }
+  //  }
 }
