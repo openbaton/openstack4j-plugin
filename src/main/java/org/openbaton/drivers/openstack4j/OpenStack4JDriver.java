@@ -51,6 +51,7 @@ import org.openbaton.vim.drivers.interfaces.VimDriver;
 import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient;
 import org.openstack4j.api.exceptions.AuthenticationException;
+import org.openstack4j.core.transport.Config;
 import org.openstack4j.model.common.ActionResponse;
 import org.openstack4j.model.common.Identifier;
 import org.openstack4j.model.common.Payload;
@@ -95,6 +96,9 @@ public class OpenStack4JDriver extends VimDriver {
   public OSClient authenticate(VimInstance vimInstance) throws VimDriverException {
 
     OSClient os;
+    Config cfg = Config.newConfig();
+    cfg.withConnectionTimeout(
+        Integer.parseInt(properties.getProperty("connection-timeout", "10000")));
     try {
       if (isV3API(vimInstance)) {
 
@@ -116,6 +120,7 @@ public class OpenStack4JDriver extends VimDriver {
                 .endpoint(vimInstance.getAuthUrl())
                 .scopeToProject(project)
                 .credentials(vimInstance.getUsername(), vimInstance.getPassword(), domain)
+                .withConfig(cfg)
                 .authenticate();
         if (vimInstance.getLocation() != null
             && vimInstance.getLocation().getName() != null
@@ -144,6 +149,7 @@ public class OpenStack4JDriver extends VimDriver {
                 .endpoint(vimInstance.getAuthUrl())
                 .credentials(vimInstance.getUsername(), vimInstance.getPassword())
                 .tenantName(vimInstance.getTenant())
+                .withConfig(cfg)
                 .authenticate();
         if (vimInstance.getLocation() != null
             && vimInstance.getLocation().getName() != null
@@ -163,6 +169,7 @@ public class OpenStack4JDriver extends VimDriver {
     } catch (AuthenticationException e) {
       throw new VimDriverException(e.getMessage(), e);
     }
+
     return os;
   }
 
@@ -893,13 +900,8 @@ public class OpenStack4JDriver extends VimDriver {
                 Builders.network()
                     .name(network.getName())
                     .adminStateUp(true)
-                    .isShared(network.getShared())
+                    .isShared(network.getExtShared())
                     .build());
-    //    for (Subnet subnet : network.getSubnets()) {
-    //      Subnet sn = createSubnet(vimInstance, res, subnet);
-    //      res.getSubnets().add(sn);
-    //
-    //    }
     return Utils.getNetwork(network4j);
   }
 
@@ -1021,17 +1023,14 @@ public class OpenStack4JDriver extends VimDriver {
 
     Thread t =
         new Thread(
-            new Runnable() {
-              @Override
-              public void run() {
-                OSClient os = null;
-                try {
-                  os = authenticate(vimInstance);
-                } catch (VimDriverException e) {
-                  e.printStackTrace();
-                }
-                ActionResponse upload = os.imagesV2().upload(imageV2.getId(), payload, imageV2);
+            () -> {
+              OSClient os1 = null;
+              try {
+                os1 = authenticate(vimInstance);
+              } catch (VimDriverException e) {
+                e.printStackTrace();
               }
+              ActionResponse upload = os1.imagesV2().upload(imageV2.getId(), payload, imageV2);
             });
 
     t.start();
