@@ -18,23 +18,9 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
+
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
 import org.openbaton.catalogue.nfvo.NFVImage;
@@ -76,6 +62,28 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 
 /** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
@@ -736,7 +744,9 @@ public class OpenStack4JDriver extends VimDriver {
           for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
             server
                 .getFloatingIps()
-                .put(fip.getKey(), associateFloatingIpToNetwork(vimInstance, server4j, fip));
+                .put(
+                    fip.getKey(),
+                    this.translateToNAT(associateFloatingIpToNetwork(vimInstance, server4j, fip)));
           }
           log.info(
               "Assigned FloatingIPs to VM with hostname: "
@@ -768,6 +778,65 @@ public class OpenStack4JDriver extends VimDriver {
     }
     log.info("Finish association of FIPs if any for server: " + server);
     return server;
+  }
+
+  private String translateToNAT(String floatingIp) throws UnknownHostException {
+
+    Properties natRules = new Properties();
+    try {
+      File file = new File("/etc/openbaton/plugin/openstack4j/nat-translation-rules.properties");
+      if (file.exists()) {
+        natRules.load(new FileInputStream(file));
+      } else {
+        natRules.load(
+            OpenStack4JDriver.class.getResourceAsStream("/nat-translation-rules.properties"));
+      }
+    } catch (IOException e) {
+      log.warn("no translation rules!");
+      return floatingIp;
+    }
+
+    for (Map.Entry<Object, Object> entry : natRules.entrySet()) {
+      String fromCidr = (String) entry.getKey();
+      String toCidr = (String) entry.getValue();
+      log.debug("cidr is: " + fromCidr);
+      SubnetUtils utilsFrom = new SubnetUtils(fromCidr);
+      SubnetUtils utilsTo = new SubnetUtils(toCidr);
+
+      SubnetUtils.SubnetInfo subnetInfoFrom = utilsFrom.getInfo();
+      SubnetUtils.SubnetInfo subnetInfoTo = utilsTo.getInfo();
+      InetAddress floatingIpNetAddr = InetAddress.getByName(floatingIp);
+      if (subnetInfoFrom.isInRange(floatingIp)) { //translation!
+
+        log.debug("From networkMask " + subnetInfoFrom.getNetmask());
+        log.debug("To networkMask " + subnetInfoTo.getNetmask());
+        if (!subnetInfoFrom.getNetmask().equals(subnetInfoTo.getNetmask())) {
+          log.error("Not translation possible, netmasks are different");
+          return floatingIp;
+        }
+        byte[] host = new byte[4];
+        for (int i = 0; i < floatingIpNetAddr.getAddress().length; i++) {
+          byte value =
+              (byte)
+                  (floatingIpNetAddr.getAddress()[i]
+                      | InetAddress.getByName(subnetInfoFrom.getNetmask()).getAddress()[i]);
+          if (value == -1) {
+            host[i] = 0;
+          } else host[i] = value;
+        }
+
+        byte[] netaddress = InetAddress.getByName(subnetInfoTo.getNetworkAddress()).getAddress();
+        String[] result = new String[4];
+        for (int i = 0; i < netaddress.length; i++) {
+          int intValue = new Byte((byte) (netaddress[i] | Byte.valueOf(host[i]))).intValue();
+          if (intValue < 0) intValue = intValue & 0xFF;
+          result[i] = String.valueOf(intValue);
+        }
+
+        return String.join(".", result);
+      }
+    }
+    return floatingIp;
   }
 
   private org.openstack4j.model.compute.Server getServerById(VimInstance vimInstance, String extId)
