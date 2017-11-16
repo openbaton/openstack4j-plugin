@@ -1,5 +1,20 @@
 package org.openbaton.drivers.openstack4j.test;
 
+import org.junit.BeforeClass;
+import org.junit.Ignore;
+import org.junit.Test;
+import org.openbaton.catalogue.mano.common.DeploymentFlavour;
+import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
+import org.openbaton.catalogue.nfvo.Server;
+import org.openbaton.catalogue.nfvo.images.BaseNfvImage;
+import org.openbaton.catalogue.nfvo.networks.BaseNetwork;
+import org.openbaton.catalogue.nfvo.viminstances.OpenstackVimInstance;
+import org.openbaton.drivers.openstack4j.OpenStack4JDriver;
+import org.openbaton.exceptions.VimDriverException;
+import org.openstack4j.api.OSClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,27 +28,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
-import org.junit.Test;
-import org.openbaton.catalogue.mano.common.DeploymentFlavour;
-import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
-import org.openbaton.catalogue.nfvo.NFVImage;
-import org.openbaton.catalogue.nfvo.Network;
-import org.openbaton.catalogue.nfvo.Server;
-import org.openbaton.catalogue.nfvo.VimInstance;
-import org.openbaton.drivers.openstack4j.OpenStack4JDriver;
-import org.openbaton.exceptions.VimDriverException;
-import org.openstack4j.api.OSClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /** Created by lto on 11/01/2017. */
 public class OpenStack4JDriverTest {
   private static Properties properties;
   private static Logger log = LoggerFactory.getLogger(OpenStack4JDriverTest.class);
   private static OpenStack4JDriver osd;
-  private static VimInstance vimInstance;
+  private static OpenstackVimInstance vimInstance;
 
   @BeforeClass
   public static void init() throws IOException {
@@ -68,7 +69,7 @@ public class OpenStack4JDriverTest {
   @Ignore
   public void listImages() throws VimDriverException {
     try {
-      for (NFVImage image : osd.listImages(vimInstance)) {
+      for (BaseNfvImage image : osd.listImages(vimInstance)) {
         log.info(image.toString());
       }
     } catch (VimDriverException e) {
@@ -89,7 +90,7 @@ public class OpenStack4JDriverTest {
   @Ignore
   public void listNetworks() throws VimDriverException {
     try {
-      for (Network network : osd.listNetworks(vimInstance)) {
+      for (BaseNetwork network : osd.listNetworks(vimInstance)) {
         log.info("Network: " + network.toString());
       }
     } catch (VimDriverException e) {
@@ -221,15 +222,16 @@ public class OpenStack4JDriverTest {
     log.info(osd.getQuota(vimInstance).toString());
   }
 
-  public static void main(String[] args) throws VimDriverException {
-
+  public static void main(String[] args) throws VimDriverException, IOException {
+    init();
     OpenStack4JDriver osd = new OpenStack4JDriver();
-    VimInstance vimInstance = getVimInstance();
-    osd.authenticate(vimInstance);
+    OpenstackVimInstance vimInstance = getVimInstance();
+    OSClient cl = osd.authenticate(vimInstance);
+//    cl.compute().zones().list().forEach(z -> z.getHosts().forEach((key, value) -> System.out.println(key + " -> " + value.get("").)));
   }
 
-  private static VimInstance getVimInstance() {
-    VimInstance vimInstance = new VimInstance();
+  private static OpenstackVimInstance getVimInstance() {
+    OpenstackVimInstance vimInstance = new OpenstackVimInstance();
     vimInstance.setName(properties.getProperty("vim.instance.name", "test"));
     vimInstance.setAuthUrl(
         properties.getProperty("vim.instance.url", "http://127.0.0.1/identity/v3"));
