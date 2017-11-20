@@ -78,9 +78,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
@@ -218,8 +220,8 @@ public class OpenStack4JDriver extends VimDriver {
       throws VimDriverException {
     Server server;
     try {
-      OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
       OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+      OSClient os = this.authenticate(openstackVimInstance);
       String tenantId =
           isV3API(openstackVimInstance)
           ? openstackVimInstance.getTenant()
@@ -238,12 +240,7 @@ public class OpenStack4JDriver extends VimDriver {
       }
       Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
       flavor = flavor4j.getId();
-      String availabilityZone = "";
-      try {
-        availabilityZone = getZone(os, vimInstance);
-      } catch (Exception e) {
-        log.warn(e.getMessage());
-      }
+      Optional<? extends AvailabilityZone> availabilityZone = getZone(os, vimInstance);
       ServerCreate sc;
       // name, flavor, imageId, user-data and network are mandatory
       ServerCreateBuilder serverCreateBuilder =
@@ -259,14 +256,10 @@ public class OpenStack4JDriver extends VimDriver {
         serverCreateBuilder.keypairName(keypair);
       }
 
-      if (!availabilityZone.isEmpty()) {
-        serverCreateBuilder.availabilityZone(availabilityZone);
-      }
+      availabilityZone.ifPresent(zone -> serverCreateBuilder.availabilityZone(zone.getZoneName()));
 
       // temporary workaround for getting first security group as it seems not supported adding multiple security groups
-      for (String sg : secGroup) {
-        serverCreateBuilder.addSecurityGroup(sg);
-      }
+      secGroup.forEach(serverCreateBuilder::addSecurityGroup);
 
       // creating ServerCreate object
       sc = serverCreateBuilder.build();
@@ -303,22 +296,13 @@ public class OpenStack4JDriver extends VimDriver {
     return server;
   }
 
-  private String getZone(OSClient os, BaseVimInstance vimInstance) throws Exception {
+  private Optional<? extends AvailabilityZone> getZone(OSClient os, BaseVimInstance vimInstance) throws Exception {
+    String az = vimInstance.getMetadata().get("az");
+    if (az == null)
+      return Optional.empty();
+    log.debug(        "Looking for availability zone with name: "        + az);
     List<? extends AvailabilityZone> availabilityZones = os.compute().zones().list();
-    for (AvailabilityZone availabilityZone : availabilityZones) {
-      log.debug(
-          "Looking for availability zone with name: "
-              + vimInstance.getLocation().getName()
-              + ". Found availability zone with name: "
-              + availabilityZone.getZoneName());
-      if (availabilityZone.getZoneName().equals(vimInstance.getLocation().getName())) {
-        return availabilityZone.getZoneName();
-      }
-    }
-    throw new Exception(
-        "Specified Availability Zone "
-            + vimInstance.getName()
-            + " not found, using the default one");
+    return availabilityZones.stream().filter(availabilityZone -> availabilityZone.getZoneName().equals(az)).findAny();
   }
 
   private Set<VNFDConnectionPoint> fixVNFDConnectionPoint(Set<VNFDConnectionPoint> networks) {
@@ -583,24 +567,42 @@ public class OpenStack4JDriver extends VimDriver {
     List<BaseNfvImage> newImages = listImages(vimInstance);
     List<String> newImageIds = new ArrayList<>();
     newImages.forEach(i -> newImageIds.add(i.getExtId()));
-    openstackVimInstance.getImages().clear();
+    if (openstackVimInstance.getImages() == null) {
+      openstackVimInstance.setImages(new HashSet<>());
+    } else {
+      openstackVimInstance.getImages().clear();
+    }
     openstackVimInstance.addAllImages(newImages);
 
     List<BaseNetwork> newNetworks = listNetworks(vimInstance);
     List<String> newNetworkIds = new ArrayList<>();
     newNetworks.forEach(i -> newNetworkIds.add(i.getExtId()));
-    openstackVimInstance.getNetworks().clear();
+    if (openstackVimInstance.getNetworks() == null) {
+      openstackVimInstance.setNetworks(new HashSet<>());
+    } else {
+      openstackVimInstance.getNetworks().clear();
+    }
     openstackVimInstance.addAllNetworks(newNetworks);
 
     List<DeploymentFlavour> newFlavors = listFlavors(vimInstance);
     List<String> newFlavorIds = new ArrayList<>();
     newFlavors.forEach(i -> newFlavorIds.add(i.getExtId()));
+    if (openstackVimInstance.getFlavours() == null) {
+      openstackVimInstance.setFlavours(new HashSet<>());
+    } else {
+      openstackVimInstance.getFlavours().clear();
+    }
     openstackVimInstance.getFlavours().clear();
     openstackVimInstance.getFlavours().addAll(newFlavors);
 
     List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> newAvalabilityZones= listAvailabilityZone(vimInstance);
     List<String> newAzNames = new ArrayList<>();
     newAvalabilityZones.forEach(i -> newAzNames.add(i.getName()));
+    if (openstackVimInstance.getZones() == null) {
+      openstackVimInstance.setZones(new HashSet<>());
+    } else {
+      openstackVimInstance.getZones().clear();
+    }
     openstackVimInstance.getZones().clear();
     openstackVimInstance.getZones().addAll(newAvalabilityZones);
 
