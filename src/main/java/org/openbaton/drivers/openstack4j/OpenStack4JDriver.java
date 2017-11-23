@@ -21,6 +21,7 @@ import com.google.gson.reflect.TypeToken;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
+import org.openbaton.catalogue.keys.PopKeypair;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
 import org.openbaton.catalogue.nfvo.Quota;
@@ -306,20 +307,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private Set<VNFDConnectionPoint> fixVNFDConnectionPoint(Set<VNFDConnectionPoint> networks) {
-    //    Collections.sort(networkList, new NetworkComparator());
-
     Gson gson = new Gson();
     String oldVNFDCP = gson.toJson(networks);
-
-    //    VNFDConnectionPoint[] vnfdConnectionPoints = newNetworks.toArray(new VNFDConnectionPoint[0]);
-    //    Arrays.sort(
-    //        vnfdConnectionPoints,
-    //        new Comparator<VNFDConnectionPoint>() {
-    //          @Override
-    //          public int compare(VNFDConnectionPoint o1, VNFDConnectionPoint o2) {
-    //            return o1.getInterfaceId() - o2.getInterfaceId();
-    //          }
-    //        });
     return gson.fromJson(oldVNFDCP, new TypeToken<Set<VNFDConnectionPoint>>() {}.getType());
   }
 
@@ -409,6 +398,20 @@ public class OpenStack4JDriver extends VimDriver {
     return res;
   }
 
+  private List<PopKeypair> listKeys(OpenstackVimInstance vimInstance) throws VimDriverException {
+    OSClient cl = this.authenticate(vimInstance);
+    List<PopKeypair> keys = new ArrayList<>();
+    cl.compute().keypairs().list().forEach(k -> {
+      PopKeypair key = new PopKeypair();
+      key.setName(k.getName());
+      key.setPublicKey(k.getPublicKey());
+      key.setFingerprint(k.getFingerprint());
+      key.setProjectId(vimInstance.getProjectId());
+      keys.add(key);
+    });
+
+    return keys;
+  }
 
   @Override
   public List<BaseNfvImage> listImages(BaseVimInstance vimInstance) throws VimDriverException {
@@ -565,46 +568,40 @@ public class OpenStack4JDriver extends VimDriver {
     OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
 
     List<BaseNfvImage> newImages = listImages(vimInstance);
-    List<String> newImageIds = new ArrayList<>();
-    newImages.forEach(i -> newImageIds.add(i.getExtId()));
     if (openstackVimInstance.getImages() == null) {
       openstackVimInstance.setImages(new HashSet<>());
-    } else {
-      openstackVimInstance.getImages().clear();
     }
+    openstackVimInstance.getImages().clear();
     openstackVimInstance.addAllImages(newImages);
 
     List<BaseNetwork> newNetworks = listNetworks(vimInstance);
-    List<String> newNetworkIds = new ArrayList<>();
-    newNetworks.forEach(i -> newNetworkIds.add(i.getExtId()));
+
     if (openstackVimInstance.getNetworks() == null) {
       openstackVimInstance.setNetworks(new HashSet<>());
-    } else {
-      openstackVimInstance.getNetworks().clear();
     }
+    openstackVimInstance.getNetworks().clear();
     openstackVimInstance.addAllNetworks(newNetworks);
 
     List<DeploymentFlavour> newFlavors = listFlavors(vimInstance);
-    List<String> newFlavorIds = new ArrayList<>();
-    newFlavors.forEach(i -> newFlavorIds.add(i.getExtId()));
     if (openstackVimInstance.getFlavours() == null) {
       openstackVimInstance.setFlavours(new HashSet<>());
-    } else {
-      openstackVimInstance.getFlavours().clear();
     }
     openstackVimInstance.getFlavours().clear();
     openstackVimInstance.getFlavours().addAll(newFlavors);
 
     List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> newAvalabilityZones= listAvailabilityZone(vimInstance);
-    List<String> newAzNames = new ArrayList<>();
-    newAvalabilityZones.forEach(i -> newAzNames.add(i.getName()));
     if (openstackVimInstance.getZones() == null) {
       openstackVimInstance.setZones(new HashSet<>());
-    } else {
-      openstackVimInstance.getZones().clear();
     }
     openstackVimInstance.getZones().clear();
     openstackVimInstance.getZones().addAll(newAvalabilityZones);
+
+    List<PopKeypair> keys = listKeys(openstackVimInstance);
+    if (openstackVimInstance.getKeys() == null) {
+      openstackVimInstance.setKeys(new HashSet<>());
+    }
+    openstackVimInstance.getKeys().clear();
+    openstackVimInstance.getKeys().addAll(keys);
 
     return openstackVimInstance;
   }
