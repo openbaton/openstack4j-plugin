@@ -91,7 +91,6 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
 
-/** Created by gca on 10/01/17. */
 public class OpenStack4JDriver extends VimDriver {
 
   private Logger log = LoggerFactory.getLogger(OpenStack4JDriver.class);
@@ -924,7 +923,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public Network createNetwork(BaseVimInstance vimInstance, BaseNetwork network) throws VimDriverException {
+  public BaseNetwork createNetwork(BaseVimInstance vimInstance, BaseNetwork network) throws VimDriverException {
 
     Network osNetwork = (Network) network;
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
@@ -1014,7 +1013,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public NFVImage addImage(final BaseVimInstance vimInstance, BaseNfvImage image, String image_url)
+  public BaseNfvImage addImage(final BaseVimInstance vimInstance, BaseNfvImage image, String image_url)
       throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     final Payload<URL> payload;
@@ -1064,12 +1063,12 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public NFVImage updateImage(BaseVimInstance vimInstance, BaseNfvImage image) throws VimDriverException {
+  public BaseNfvImage updateImage(BaseVimInstance vimInstance, BaseNfvImage image) throws VimDriverException {
     return null;
   }
 
   @Override
-  public NFVImage copyImage(BaseVimInstance vimInstance, BaseNfvImage  image, byte[] imageFile)
+  public BaseNfvImage copyImage(BaseVimInstance vimInstance, BaseNfvImage  image, byte[] imageFile)
       throws VimDriverException {
     return null;
   }
@@ -1121,13 +1120,13 @@ public class OpenStack4JDriver extends VimDriver {
 
   //TODO need to chage byte[] to stream, at least...
   @Override
-  public NFVImage addImage(BaseVimInstance vimInstance, BaseNfvImage image, byte[] imageFile)
+  public BaseNfvImage addImage(BaseVimInstance vimInstance, BaseNfvImage image, byte[] imageFile)
       throws VimDriverException {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public Network updateNetwork(BaseVimInstance vimInstance, BaseNetwork network) throws VimDriverException {
+  public BaseNetwork updateNetwork(BaseVimInstance vimInstance, BaseNetwork network) throws VimDriverException {
     return null;
   }
 
@@ -1157,7 +1156,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public Network getNetworkById(BaseVimInstance vimInstance, String id) throws VimDriverException {
+  public BaseNetwork getNetworkById(BaseVimInstance vimInstance, String id) throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     return Utils.getNetwork(os.networking().network().get(id));
   }
