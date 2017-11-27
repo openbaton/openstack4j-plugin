@@ -18,7 +18,29 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.regex.Pattern;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -66,30 +88,6 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
 
 public class OpenStack4JDriver extends VimDriver {
 
@@ -224,8 +222,8 @@ public class OpenStack4JDriver extends VimDriver {
       OSClient os = this.authenticate(openstackVimInstance);
       String tenantId =
           isV3API(openstackVimInstance)
-          ? openstackVimInstance.getTenant()
-          : getTenantFromName(os, openstackVimInstance.getTenant());
+              ? openstackVimInstance.getTenant()
+              : getTenantFromName(os, openstackVimInstance.getTenant());
       List<String> osNetworkIds = getNetworkIdsFromNames(os, tenantId, vnfdConnectionPoints);
 
       String imageId = getImageIdFromName(vimInstance, image);
@@ -296,13 +294,16 @@ public class OpenStack4JDriver extends VimDriver {
     return server;
   }
 
-  private Optional<? extends AvailabilityZone> getZone(OSClient os, BaseVimInstance vimInstance) throws Exception {
+  private Optional<? extends AvailabilityZone> getZone(OSClient os, BaseVimInstance vimInstance)
+      throws Exception {
     String az = vimInstance.getMetadata().get("az");
-    if (az == null)
-      return Optional.empty();
-    log.debug(        "Looking for availability zone with name: "        + az);
+    if (az == null) return Optional.empty();
+    log.debug("Looking for availability zone with name: " + az);
     List<? extends AvailabilityZone> availabilityZones = os.compute().zones().list();
-    return availabilityZones.stream().filter(availabilityZone -> availabilityZone.getZoneName().equals(az)).findAny();
+    return availabilityZones
+        .stream()
+        .filter(availabilityZone -> availabilityZone.getZoneName().equals(az))
+        .findAny();
   }
 
   private Set<VNFDConnectionPoint> fixVNFDConnectionPoint(Set<VNFDConnectionPoint> networks) {
@@ -323,10 +324,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private List<String> getNetworkIdsFromNames(
-      OSClient os, String tenantId, Set<VNFDConnectionPoint> networks)
-      throws VimDriverException {
+      OSClient os, String tenantId, Set<VNFDConnectionPoint> networks) throws VimDriverException {
     List<String> res = new LinkedList<>();
-
 
     List<VNFDConnectionPoint> vnfdConnectionPoints = new ArrayList<>();
     vnfdConnectionPoints.addAll(networks);
@@ -371,7 +370,8 @@ public class OpenStack4JDriver extends VimDriver {
     log.info("Getting image id of " + imageName + " on " + vimInstance.getName());
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     for (BaseNfvImage image4j : this.listImages(vimInstance)) {
-      if (((NFVImage)image4j).getName().equals(imageName) || image4j.getExtId().equals(imageName)) {
+      if (((NFVImage) image4j).getName().equals(imageName)
+          || image4j.getExtId().equals(imageName)) {
         return image4j.getExtId();
       }
     }
@@ -388,7 +388,9 @@ public class OpenStack4JDriver extends VimDriver {
     for (NetFloatingIP floatingIP : floatingIPs) {
       if (isV3API(vimInstance) && floatingIP.getTenantId().equals(openstackVimInstance.getTenant())
           || (!isV3API(vimInstance)
-              && floatingIP.getTenantId().equals(getTenantFromName(os, openstackVimInstance.getTenant())))) {
+              && floatingIP
+                  .getTenantId()
+                  .equals(getTenantFromName(os, openstackVimInstance.getTenant())))) {
         if (floatingIP.getFixedIpAddress() == null || floatingIP.getFixedIpAddress().equals("")) {
           res.add(floatingIP);
         }
@@ -400,14 +402,18 @@ public class OpenStack4JDriver extends VimDriver {
   private List<PopKeypair> listKeys(OpenstackVimInstance vimInstance) throws VimDriverException {
     OSClient cl = this.authenticate(vimInstance);
     List<PopKeypair> keys = new ArrayList<>();
-    cl.compute().keypairs().list().forEach(k -> {
-      PopKeypair key = new PopKeypair();
-      key.setName(k.getName());
-      key.setPublicKey(k.getPublicKey());
-      key.setFingerprint(k.getFingerprint());
-      key.setProjectId(vimInstance.getProjectId());
-      keys.add(key);
-    });
+    cl.compute()
+        .keypairs()
+        .list()
+        .forEach(
+            k -> {
+              PopKeypair key = new PopKeypair();
+              key.setName(k.getName());
+              key.setPublicKey(k.getPublicKey());
+              key.setFingerprint(k.getFingerprint());
+              key.setProjectId(vimInstance.getProjectId());
+              keys.add(key);
+            });
 
     return keys;
   }
@@ -447,7 +453,8 @@ public class OpenStack4JDriver extends VimDriver {
       for (org.openstack4j.model.compute.Server srv : servers) {
         if ((isV3API(vimInstance) && srv.getTenantId().equals(openstackVimInstance.getTenant())
             || (!isV3API(vimInstance)
-                && srv.getTenantId().equals(getTenantFromName(os, openstackVimInstance.getTenant()))))) {
+                && srv.getTenantId()
+                    .equals(getTenantFromName(os, openstackVimInstance.getTenant()))))) {
           obServers.add(Utils.getServer(srv));
         }
       }
@@ -469,7 +476,8 @@ public class OpenStack4JDriver extends VimDriver {
       List<BaseNetwork> nfvNetworks = new ArrayList<>();
       for (org.openstack4j.model.network.Network network : networks) {
         if ((network.isRouterExternal() || network.isShared())
-            || (isV3API(vimInstance) && network.getTenantId().equals(openstackVimInstance.getTenant())
+            || (isV3API(vimInstance)
+                    && network.getTenantId().equals(openstackVimInstance.getTenant())
                 || (!isV3API(vimInstance)
                     && network
                         .getTenantId()
@@ -547,7 +555,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public List<DeploymentFlavour> listFlavors(BaseVimInstance vimInstance) throws VimDriverException {
+  public List<DeploymentFlavour> listFlavors(BaseVimInstance vimInstance)
+      throws VimDriverException {
     List<DeploymentFlavour> deploymentFlavours = new ArrayList<>();
     try {
       OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
@@ -588,7 +597,8 @@ public class OpenStack4JDriver extends VimDriver {
     openstackVimInstance.getFlavours().clear();
     openstackVimInstance.getFlavours().addAll(newFlavors);
 
-    List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> newAvalabilityZones= listAvailabilityZone(vimInstance);
+    List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> newAvalabilityZones =
+        listAvailabilityZone(vimInstance);
     if (openstackVimInstance.getZones() == null) {
       openstackVimInstance.setZones(new HashSet<>());
     }
@@ -605,10 +615,11 @@ public class OpenStack4JDriver extends VimDriver {
     return openstackVimInstance;
   }
 
-  private List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> listAvailabilityZone(BaseVimInstance vimInstance) throws
-                                                                                                                             VimDriverException {
+  private List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> listAvailabilityZone(
+      BaseVimInstance vimInstance) throws VimDriverException {
     List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> res = new ArrayList<>();
-    for (AvailabilityZone az : authenticate((OpenstackVimInstance) vimInstance).compute().zones().list()){
+    for (AvailabilityZone az :
+        authenticate((OpenstackVimInstance) vimInstance).compute().zones().list()) {
       res.add(Utils.getAvailabilityZone(az));
     }
     return res;
@@ -799,8 +810,8 @@ public class OpenStack4JDriver extends VimDriver {
     return floatingIp;
   }
 
-  private org.openstack4j.model.compute.Server getServerById(BaseVimInstance vimInstance, String extId)
-      throws VimDriverException {
+  private org.openstack4j.model.compute.Server getServerById(
+      BaseVimInstance vimInstance, String extId) throws VimDriverException {
     OSClient os = authenticate((OpenstackVimInstance) vimInstance);
     return os.compute().servers().get(extId);
   }
@@ -923,7 +934,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public BaseNetwork createNetwork(BaseVimInstance vimInstance, BaseNetwork network) throws VimDriverException {
+  public BaseNetwork createNetwork(BaseVimInstance vimInstance, BaseNetwork network)
+      throws VimDriverException {
 
     Network osNetwork = (Network) network;
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
@@ -932,9 +944,9 @@ public class OpenStack4JDriver extends VimDriver {
             .network()
             .create(
                 Builders.network()
-                    .name(osNetwork .getName())
+                    .name(osNetwork.getName())
                     .adminStateUp(true)
-                    .isShared(osNetwork .getExtShared())
+                    .isShared(osNetwork.getExtShared())
                     .build());
     return Utils.getNetwork(network4j);
   }
@@ -947,7 +959,9 @@ public class OpenStack4JDriver extends VimDriver {
     for (Router router : tmpRouters) {
       if ((isV3API(vimInstance) && router.getTenantId().equals(openstackVimInstance.getTenant())
           || (!isV3API(vimInstance)
-              && router.getTenantId().equals(getTenantFromName(os, openstackVimInstance.getTenant()))))) {
+              && router
+                  .getTenantId()
+                  .equals(getTenantFromName(os, openstackVimInstance.getTenant()))))) {
         routers.add(router);
       }
     }
@@ -985,16 +999,16 @@ public class OpenStack4JDriver extends VimDriver {
   private Network getExternalNet(BaseVimInstance vimInstance) throws VimDriverException {
     for (BaseNetwork net : listNetworks(vimInstance)) {
 
-      if (((Network)net).getExternal()) {
-        return ((Network)net);
+      if (((Network) net).getExternal()) {
+        return ((Network) net);
       }
     }
     throw new VimDriverException("No External Network found! please add one");
   }
 
   @Override
-  public DeploymentFlavour addFlavor(BaseVimInstance vimInstance, DeploymentFlavour deploymentFlavour)
-      throws VimDriverException {
+  public DeploymentFlavour addFlavor(
+      BaseVimInstance vimInstance, DeploymentFlavour deploymentFlavour) throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     //TODO add missing parameter to deployment flavor, hopefully fixed with etsi v2.1.1
     Flavor flavor =
@@ -1013,7 +1027,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public BaseNfvImage addImage(final BaseVimInstance vimInstance, BaseNfvImage image, String image_url)
+  public BaseNfvImage addImage(
+      final BaseVimInstance vimInstance, BaseNfvImage image, String image_url)
       throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     final Payload<URL> payload;
@@ -1063,18 +1078,20 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public BaseNfvImage updateImage(BaseVimInstance vimInstance, BaseNfvImage image) throws VimDriverException {
-    return null;
-  }
-
-  @Override
-  public BaseNfvImage copyImage(BaseVimInstance vimInstance, BaseNfvImage  image, byte[] imageFile)
+  public BaseNfvImage updateImage(BaseVimInstance vimInstance, BaseNfvImage image)
       throws VimDriverException {
     return null;
   }
 
   @Override
-  public boolean deleteImage(BaseVimInstance vimInstance, BaseNfvImage image) throws VimDriverException {
+  public BaseNfvImage copyImage(BaseVimInstance vimInstance, BaseNfvImage image, byte[] imageFile)
+      throws VimDriverException {
+    return null;
+  }
+
+  @Override
+  public boolean deleteImage(BaseVimInstance vimInstance, BaseNfvImage image)
+      throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     return os.images().delete(image.getExtId()).isSuccess();
   }
@@ -1126,7 +1143,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public BaseNetwork updateNetwork(BaseVimInstance vimInstance, BaseNetwork network) throws VimDriverException {
+  public BaseNetwork updateNetwork(BaseVimInstance vimInstance, BaseNetwork network)
+      throws VimDriverException {
     return null;
   }
 
@@ -1150,13 +1168,15 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public boolean deleteNetwork(BaseVimInstance vimInstance, String extId) throws VimDriverException {
+  public boolean deleteNetwork(BaseVimInstance vimInstance, String extId)
+      throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     return os.networking().network().delete(extId).isSuccess();
   }
 
   @Override
-  public BaseNetwork getNetworkById(BaseVimInstance vimInstance, String id) throws VimDriverException {
+  public BaseNetwork getNetworkById(BaseVimInstance vimInstance, String id)
+      throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     return Utils.getNetwork(os.networking().network().get(id));
   }

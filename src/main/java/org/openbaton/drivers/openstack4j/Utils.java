@@ -1,5 +1,10 @@
 package org.openbaton.drivers.openstack4j;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
 import org.openbaton.catalogue.nfvo.Quota;
 import org.openbaton.catalogue.nfvo.images.BaseNfvImage;
@@ -15,12 +20,6 @@ import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Subnet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 
 /** Created by lto on 10/01/2017. */
 class Utils {
@@ -115,7 +114,8 @@ class Utils {
   }
 
   static org.openbaton.catalogue.nfvo.networks.Subnet getSubnet(Subnet subnet) {
-    org.openbaton.catalogue.nfvo.networks.Subnet nfvSubnet = new org.openbaton.catalogue.nfvo.networks.Subnet();
+    org.openbaton.catalogue.nfvo.networks.Subnet nfvSubnet =
+        new org.openbaton.catalogue.nfvo.networks.Subnet();
     nfvSubnet.setExtId(subnet.getId());
     nfvSubnet.setName(subnet.getName());
     nfvSubnet.setCidr(subnet.getCidr());
@@ -144,14 +144,14 @@ class Utils {
     return quota;
   }
 
-  static org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone getAvailabilityZone(AvailabilityZone az) {
-    org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone
-        availabilityZone =
+  static org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone getAvailabilityZone(
+      AvailabilityZone az) {
+    org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone availabilityZone =
         new org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone();
     availabilityZone.setName(az.getZoneName());
     availabilityZone.setAvailable(az.getZoneState().getAvailable());
     availabilityZone.setHosts(new HashMap<>());
-    az.getHosts().forEach((k, v)-> v.forEach((k2,v2)->availabilityZone.getHosts().put(k,k2)));
+    az.getHosts().forEach((k, v) -> v.forEach((k2, v2) -> availabilityZone.getHosts().put(k, k2)));
     return availabilityZone;
   }
 }

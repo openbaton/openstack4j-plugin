@@ -1,5 +1,18 @@
 package org.openbaton.drivers.openstack4j.test;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -14,20 +27,6 @@ import org.openbaton.exceptions.VimDriverException;
 import org.openstack4j.api.OSClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
 
 /** Created by lto on 11/01/2017. */
 public class OpenStack4JDriverTest {
@@ -227,7 +226,7 @@ public class OpenStack4JDriverTest {
     OpenStack4JDriver osd = new OpenStack4JDriver();
     OpenstackVimInstance vimInstance = getVimInstance();
     OSClient cl = osd.authenticate(vimInstance);
-//    cl.compute().zones().list().forEach(z -> z.getHosts().forEach((key, value) -> System.out.println(key + " -> " + value.get("").)));
+    //    cl.compute().zones().list().forEach(z -> z.getHosts().forEach((key, value) -> System.out.println(key + " -> " + value.get("").)));
   }
 
   private static OpenstackVimInstance getVimInstance() {
