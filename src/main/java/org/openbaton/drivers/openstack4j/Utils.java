@@ -6,13 +6,15 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
-import org.openbaton.catalogue.nfvo.NFVImage;
-import org.openbaton.catalogue.nfvo.Network;
 import org.openbaton.catalogue.nfvo.Quota;
+import org.openbaton.catalogue.nfvo.images.BaseNfvImage;
+import org.openbaton.catalogue.nfvo.images.NFVImage;
+import org.openbaton.catalogue.nfvo.networks.Network;
 import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.Server;
+import org.openstack4j.model.compute.ext.AvailabilityZone;
 import org.openstack4j.model.image.Image;
 import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Subnet;
@@ -81,7 +83,7 @@ class Utils {
     return image;
   }
 
-  static NFVImage getImage(Image image) {
+  static BaseNfvImage getImage(Image image) {
     NFVImage nfvImage = new NFVImage();
     nfvImage.setName(image.getName());
     nfvImage.setExtId(image.getId());
@@ -111,8 +113,9 @@ class Utils {
     return nfvImage;
   }
 
-  static org.openbaton.catalogue.nfvo.Subnet getSubnet(Subnet subnet) {
-    org.openbaton.catalogue.nfvo.Subnet nfvSubnet = new org.openbaton.catalogue.nfvo.Subnet();
+  static org.openbaton.catalogue.nfvo.networks.Subnet getSubnet(Subnet subnet) {
+    org.openbaton.catalogue.nfvo.networks.Subnet nfvSubnet =
+        new org.openbaton.catalogue.nfvo.networks.Subnet();
     nfvSubnet.setExtId(subnet.getId());
     nfvSubnet.setName(subnet.getName());
     nfvSubnet.setCidr(subnet.getCidr());
@@ -126,7 +129,7 @@ class Utils {
     nfvNetwork.setName(network.getName());
     nfvNetwork.setExtId(network.getId());
     nfvNetwork.setExternal(network.isRouterExternal());
-    nfvNetwork.setSubnets(new HashSet<org.openbaton.catalogue.nfvo.Subnet>());
+    nfvNetwork.setSubnets(new HashSet<>());
     return nfvNetwork;
   }
 
@@ -139,5 +142,16 @@ class Utils {
     quota.setKeyPairs(qs.getKeyPairs());
     quota.setRam(qs.getRam());
     return quota;
+  }
+
+  static org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone getAvailabilityZone(
+      AvailabilityZone az) {
+    org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone availabilityZone =
+        new org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone();
+    availabilityZone.setName(az.getZoneName());
+    availabilityZone.setAvailable(az.getZoneState().getAvailable());
+    availabilityZone.setHosts(new HashMap<>());
+    az.getHosts().forEach((k, v) -> v.forEach((k2, v2) -> availabilityZone.getHosts().put(k, k2)));
+    return availabilityZone;
   }
 }
