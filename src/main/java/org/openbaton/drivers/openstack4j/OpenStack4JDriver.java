@@ -220,15 +220,10 @@ public class OpenStack4JDriver extends VimDriver {
     try {
       OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
       OSClient os = this.authenticate(openstackVimInstance);
-      String tenantId =
-          isV3API(openstackVimInstance)
-              ? openstackVimInstance.getTenant()
-              : getTenantFromName(os, openstackVimInstance.getTenant());
 
       List<VNFDConnectionPoint> vnfdcps = new ArrayList<>();
       vnfdcps.addAll(vnfdConnectionPoints);
       vnfdcps.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
-      List<String> osNetworkIds = getNetworkIdsFromNames(os, tenantId, vnfdcps);
 
       String imageId = getImageIdFromName(vimInstance, image);
       log.debug("imageId: " + imageId);
@@ -282,6 +277,8 @@ public class OpenStack4JDriver extends VimDriver {
       // createing ServerCreate object
       sc = serverCreateBuilder.build();
 
+      List<String> netIds = new ArrayList<>();
+      vnfdcps.forEach(v -> netIds.add(v.getVirtual_link_reference()));
       log.debug(
           "Keypair: "
               + keypair
@@ -292,7 +289,7 @@ public class OpenStack4JDriver extends VimDriver {
               + ", flavorId: "
               + flavor
               + ", networks: "
-              + osNetworkIds);
+              + netIds);
       org.openstack4j.model.compute.Server server4j = os.compute().servers().boot(sc);
       server = Utils.getServer(server4j);
     } catch (Exception e) {
