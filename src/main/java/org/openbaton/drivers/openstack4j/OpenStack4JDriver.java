@@ -220,11 +220,10 @@ public class OpenStack4JDriver extends VimDriver {
     try {
       OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
       OSClient os = this.authenticate(openstackVimInstance);
-      String tenantId =
-          isV3API(openstackVimInstance)
-              ? openstackVimInstance.getTenant()
-              : getTenantFromName(os, openstackVimInstance.getTenant());
-      List<String> osNetworkIds = getNetworkIdsFromNames(os, tenantId, vnfdConnectionPoints);
+
+      List<VNFDConnectionPoint> vnfdcps = new ArrayList<>();
+      vnfdcps.addAll(vnfdConnectionPoints);
+      vnfdcps.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
 
       String imageId = getImageIdFromName(vimInstance, image);
       log.debug("imageId: " + imageId);
@@ -246,7 +245,6 @@ public class OpenStack4JDriver extends VimDriver {
               .name(name)
               .flavor(flavor)
               .image(imageId)
-              .networks(osNetworkIds)
               .userData(new String(Base64.encodeBase64(userData.getBytes())));
 
       // check if keypair is not null and is not equal empty string
@@ -262,18 +260,25 @@ public class OpenStack4JDriver extends VimDriver {
       // creating ServerCreate object
       sc = serverCreateBuilder.build();
 
-      for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
+      for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
           sc.addNetwork(
               getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id())
                   .getExtId(),
               vnfdConnectionPoint.getFixedIp());
+        } else {
+          sc.addNetwork(
+              getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id())
+                  .getExtId(),
+              null);
         }
       }
       // createing ServerCreate object
       sc = serverCreateBuilder.build();
 
+      List<String> netIds = new ArrayList<>();
+      vnfdcps.forEach(v -> netIds.add(v.getVirtual_link_reference()));
       log.debug(
           "Keypair: "
               + keypair
@@ -284,7 +289,7 @@ public class OpenStack4JDriver extends VimDriver {
               + ", flavorId: "
               + flavor
               + ", networks: "
-              + osNetworkIds);
+              + netIds);
       org.openstack4j.model.compute.Server server4j = os.compute().servers().boot(sc);
       server = Utils.getServer(server4j);
     } catch (Exception e) {
@@ -324,12 +329,9 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private List<String> getNetworkIdsFromNames(
-      OSClient os, String tenantId, Set<VNFDConnectionPoint> networks) throws VimDriverException {
+      OSClient os, String tenantId, List<VNFDConnectionPoint> vnfdConnectionPoints)
+      throws VimDriverException {
     List<String> res = new LinkedList<>();
-
-    List<VNFDConnectionPoint> vnfdConnectionPoints = new ArrayList<>();
-    vnfdConnectionPoints.addAll(networks);
-    vnfdConnectionPoints.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
 
     for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
       if (vnfdConnectionPoint.getFixedIp() == null || vnfdConnectionPoint.getFixedIp().equals("")) {
