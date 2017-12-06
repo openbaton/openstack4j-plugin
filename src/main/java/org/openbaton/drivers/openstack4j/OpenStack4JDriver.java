@@ -250,7 +250,6 @@ public class OpenStack4JDriver extends VimDriver {
               .name(name)
               .flavor(flavor)
               .image(imageId)
-              .networks(osNetworkIds)
               .userData(new String(Base64.encodeBase64(userData.getBytes())));
 
       // check if keypair is not null and is not equal empty string
@@ -273,6 +272,11 @@ public class OpenStack4JDriver extends VimDriver {
               getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id())
                   .getExtId(),
               vnfdConnectionPoint.getFixedIp());
+        } else {
+          sc.addNetwork(
+              getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id())
+                  .getExtId(),
+              null);
         }
       }
       // createing ServerCreate object
@@ -328,7 +332,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private List<String> getNetworkIdsFromNames(
-      OSClient os, String tenantId, List<VNFDConnectionPoint> vnfdConnectionPoints) throws VimDriverException {
+      OSClient os, String tenantId, List<VNFDConnectionPoint> vnfdConnectionPoints)
+      throws VimDriverException {
     List<String> res = new LinkedList<>();
 
     for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
