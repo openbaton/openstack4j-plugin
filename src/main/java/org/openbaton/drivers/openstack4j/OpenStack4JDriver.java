@@ -224,7 +224,11 @@ public class OpenStack4JDriver extends VimDriver {
           isV3API(openstackVimInstance)
               ? openstackVimInstance.getTenant()
               : getTenantFromName(os, openstackVimInstance.getTenant());
-      List<String> osNetworkIds = getNetworkIdsFromNames(os, tenantId, vnfdConnectionPoints);
+
+      List<VNFDConnectionPoint> vnfdcps = new ArrayList<>();
+      vnfdcps.addAll(vnfdConnectionPoints);
+      vnfdcps.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
+      List<String> osNetworkIds = getNetworkIdsFromNames(os, tenantId, vnfdcps);
 
       String imageId = getImageIdFromName(vimInstance, image);
       log.debug("imageId: " + imageId);
@@ -262,7 +266,7 @@ public class OpenStack4JDriver extends VimDriver {
       // creating ServerCreate object
       sc = serverCreateBuilder.build();
 
-      for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
+      for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
           sc.addNetwork(
@@ -324,12 +328,8 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private List<String> getNetworkIdsFromNames(
-      OSClient os, String tenantId, Set<VNFDConnectionPoint> networks) throws VimDriverException {
+      OSClient os, String tenantId, List<VNFDConnectionPoint> vnfdConnectionPoints) throws VimDriverException {
     List<String> res = new LinkedList<>();
-
-    List<VNFDConnectionPoint> vnfdConnectionPoints = new ArrayList<>();
-    vnfdConnectionPoints.addAll(networks);
-    vnfdConnectionPoints.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
 
     for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
       if (vnfdConnectionPoint.getFixedIp() == null || vnfdConnectionPoint.getFixedIp().equals("")) {
