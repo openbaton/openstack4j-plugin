@@ -261,17 +261,22 @@ public class OpenStack4JDriver extends VimDriver {
       sc = serverCreateBuilder.build();
 
       for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
+        String extNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
+        if (extNetId == null) {
+          Optional<? extends org.openstack4j.model.network.Network> networkByName =
+              getNetworkByName(os, vnfdConnectionPoint.getVirtual_link_reference());
+          if (networkByName.isPresent()) extNetId = networkByName.get().getId();
+          else
+            throw new VimDriverException(
+                String.format(
+                    "Network with name %s was not found",
+                    vnfdConnectionPoint.getVirtual_link_reference()));
+        }
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
-          sc.addNetwork(
-              getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id())
-                  .getExtId(),
-              vnfdConnectionPoint.getFixedIp());
+          sc.addNetwork(extNetId, vnfdConnectionPoint.getFixedIp());
         } else {
-          sc.addNetwork(
-              getNetworkById(vimInstance, vnfdConnectionPoint.getVirtual_link_reference_id())
-                  .getExtId(),
-              null);
+          sc.addNetwork(extNetId, null);
         }
       }
       // createing ServerCreate object
@@ -297,6 +302,16 @@ public class OpenStack4JDriver extends VimDriver {
       throw new VimDriverException(e.getMessage());
     }
     return server;
+  }
+
+  private Optional<? extends org.openstack4j.model.network.Network> getNetworkByName(
+      OSClient os, String name) {
+    return os.networking()
+        .network()
+        .list()
+        .stream()
+        .filter(n -> n.getName().equals(name))
+        .findFirst();
   }
 
   private Optional<? extends AvailabilityZone> getZone(OSClient os, BaseVimInstance vimInstance)
