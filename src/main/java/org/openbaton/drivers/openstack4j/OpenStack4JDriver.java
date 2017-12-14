@@ -18,14 +18,15 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.security.KeyStore;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -41,6 +42,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Pattern;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -93,6 +96,7 @@ public class OpenStack4JDriver extends VimDriver {
 
   private Logger log = LoggerFactory.getLogger(OpenStack4JDriver.class);
   private static Lock lock;
+  private SSLContext sslContext;
 
   public OpenStack4JDriver() {
     super();
@@ -107,8 +111,52 @@ public class OpenStack4JDriver extends VimDriver {
 
   public OSClient authenticate(OpenstackVimInstance vimInstance) throws VimDriverException {
 
+    if (vimInstance.getAuthUrl().contains("https")) {
+      /* If HTTPS is used, check for the corresponding keyfile and add it to the
+       * keystore. This is unsafe as the chain of trust is not verified but enables
+       * encrypted connections. */
+      try {
+        // Requirement: -Djavax.net.ssl.trustStore=/tmp/cacerts
+        final String passphrase = "changeit";
+        // TODO: get cert from ENV (new ByteArrayInputStream(System.Environment.getBytes("UTF-8"))) or FILE?
+        //InputStream certIn = new FileInputStream("/tmp/oscert.pem");
+        InputStream certIn = new ByteArrayInputStream(System.getenv("OSCERT").getBytes("UTF-8"));
+        // TODO: check for cacerts?
+        File file = new File("/tmp/cacerts");
+        InputStream caCerts = new FileInputStream(file);
+
+        KeyStore keystore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keystore.load(caCerts, passphrase.toCharArray());
+        BufferedInputStream bis = new BufferedInputStream(certIn);
+        // TODO: only x509 pem input?
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+
+        // TODO: Alias also as ENV or from vimName?
+        if (!keystore.containsAlias(vimInstance.getName())) {
+          while (bis.available() > 0) {
+            X509Certificate cert = (X509Certificate) cf.generateCertificate(bis);
+            keystore.setCertificateEntry(vimInstance.getName(), cert);
+          }
+
+          OutputStream out = new FileOutputStream(file);
+          keystore.store(out, passphrase.toCharArray());
+          out.close();
+
+          TrustManagerFactory tmf =
+              TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+          tmf.init(keystore);
+
+          sslContext = SSLContext.getInstance("SSL");
+          sslContext.init(null, tmf.getTrustManagers(), null);
+        }
+      } catch (Exception e) {
+        log.debug("Building of ssl-context failed");
+        e.printStackTrace();
+      }
+    }
+
     OSClient os;
-    Config cfg = Config.DEFAULT;
+    Config cfg = Config.DEFAULT.withSSLContext(sslContext);
     cfg =
         cfg.withConnectionTimeout(
             Integer.parseInt(properties.getProperty("connection-timeout", "10000")));
