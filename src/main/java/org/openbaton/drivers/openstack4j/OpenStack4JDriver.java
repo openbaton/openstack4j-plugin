@@ -299,22 +299,46 @@ public class OpenStack4JDriver extends VimDriver {
               + ", networks: "
               + netIds);
       org.openstack4j.model.compute.Server server4j;
-      if (vnfdcps.stream().anyMatch(this::allowsAllSourceAddresses)){
-        server4j = os.compute().servers().bootAndWaitActive(sc, Integer.parseInt(properties.getProperty("maxActiveWaitTime","300000")));
-        os.networking().port().list().stream().filter(p -> {
-          for (Map.Entry<String, List<? extends Address>> e : server4j.getAddresses().getAddresses().entrySet()){
-            if (e.getValue().stream().anyMatch(a -> a.getMacAddr().equalsIgnoreCase(p.getMacAddress()))){
-              if (vnfdcps.stream().anyMatch(cp -> allowsAllSourceAddresses(cp) && cp.getVirtual_link_reference().equals(e.getKey()))){
-                return true;
-              }
-            }
-          }
-          return false;
-        }).forEach(p -> os.networking().port().update(p.toBuilder().allowedAddressPair("0.0.0.0/0", p.getMacAddress()).build()));
+      if (vnfdcps.stream().anyMatch(this::allowsAllSourceAddresses)) {
+        server4j =
+            os.compute()
+                .servers()
+                .bootAndWaitActive(
+                    sc, Integer.parseInt(properties.getProperty("maxActiveWaitTime", "300000")));
+        os.networking()
+            .port()
+            .list()
+            .stream()
+            .filter(
+                p -> {
+                  for (Map.Entry<String, List<? extends Address>> e :
+                      server4j.getAddresses().getAddresses().entrySet()) {
+                    if (e.getValue()
+                        .stream()
+                        .anyMatch(a -> a.getMacAddr().equalsIgnoreCase(p.getMacAddress()))) {
+                      if (vnfdcps
+                          .stream()
+                          .anyMatch(
+                              cp ->
+                                  allowsAllSourceAddresses(cp)
+                                      && cp.getVirtual_link_reference().equals(e.getKey()))) {
+                        return true;
+                      }
+                    }
+                  }
+                  return false;
+                })
+            .forEach(
+                p ->
+                    os.networking()
+                        .port()
+                        .update(
+                            p.toBuilder()
+                                .allowedAddressPair("0.0.0.0/0", p.getMacAddress())
+                                .build()));
       } else {
         server4j = os.compute().servers().boot(sc);
       }
-
 
       server = Utils.getServer(server4j);
     } catch (Exception e) {
@@ -325,7 +349,9 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private boolean allowsAllSourceAddresses(VNFDConnectionPoint cp) {
-    return cp.getMetadata() != null && cp.getMetadata().containsKey("allowAllSourceAddresses") && cp.getMetadata().get("allowAllSourceAddresses").equalsIgnoreCase("true");
+    return cp.getMetadata() != null
+        && cp.getMetadata().containsKey("allowAllSourceAddresses")
+        && cp.getMetadata().get("allowAllSourceAddresses").equalsIgnoreCase("true");
   }
 
   private String getTenantId(OpenstackVimInstance vimInstance, OSClient os)
