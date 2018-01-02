@@ -27,11 +27,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,7 +38,6 @@ import java.util.Set;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.regex.Pattern;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -56,7 +53,6 @@ import org.openbaton.catalogue.nfvo.networks.Subnet;
 import org.openbaton.catalogue.nfvo.viminstances.BaseVimInstance;
 import org.openbaton.catalogue.nfvo.viminstances.OpenstackVimInstance;
 import org.openbaton.catalogue.security.Key;
-import org.openbaton.exceptions.NotFoundException;
 import org.openbaton.exceptions.VimDriverException;
 import org.openbaton.exceptions.VimException;
 import org.openbaton.plugin.PluginStarter;
@@ -115,15 +111,18 @@ public class OpenStack4JDriver extends VimDriver {
     try {
       if (isV3API(vimInstance)) {
 
-        Identifier domain = Identifier.byName("Default");
+        Identifier domain =
+            vimInstance.getDomain() == null || vimInstance.getDomain().equals("")
+                ? Identifier.byName("Default")
+                : Identifier.byName(vimInstance.getDomain());
         Identifier project = Identifier.byId(vimInstance.getTenant());
 
-        String[] domainProjectSplit = vimInstance.getTenant().split(Pattern.quote(":"));
-        if (domainProjectSplit.length == 2) {
-          log.trace("Found domain name and project id: " + Arrays.toString(domainProjectSplit));
-          domain = Identifier.byName(domainProjectSplit[0]);
-          project = Identifier.byId(domainProjectSplit[1]);
-        }
+        //        String[] domainProjectSplit = vimInstance.getTenant().split(Pattern.quote(":"));
+        //        if (domainProjectSplit.length == 2) {
+        //          log.trace("Found domain name and project id: " + Arrays.toString(domainProjectSplit));
+        //          domain = Identifier.byName(domainProjectSplit[0]);
+        //          project = Identifier.byId(domainProjectSplit[1]);
+        //        }
 
         log.trace("Domain id: " + domain.getId());
         log.trace("Project id: " + project.getId());
@@ -187,7 +186,9 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private boolean isV3API(BaseVimInstance vimInstance) {
-    return vimInstance.getAuthUrl().endsWith("/v3") || vimInstance.getAuthUrl().endsWith("/v3.0");
+    return vimInstance.getAuthUrl().endsWith("/v3")
+        || vimInstance.getAuthUrl().endsWith("/v3/")
+        || vimInstance.getAuthUrl().endsWith("/v3.0");
   }
 
   public static void main(String[] args)
@@ -205,9 +206,9 @@ public class OpenStack4JDriver extends VimDriver {
     }
   }
 
-  @Override
-  public Server launchInstance(
-      BaseVimInstance vimInstance,
+  private Server launchInstance(
+      OSClient os,
+      OpenstackVimInstance openstackVimInstance,
       String name,
       String image,
       String flavor,
@@ -218,26 +219,24 @@ public class OpenStack4JDriver extends VimDriver {
       throws VimDriverException {
     Server server;
     try {
-      OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
-      OSClient os = this.authenticate(openstackVimInstance);
 
-      List<VNFDConnectionPoint> vnfdcps = new ArrayList<>();
-      vnfdcps.addAll(vnfdConnectionPoints);
+      List<VNFDConnectionPoint> vnfdcps = new ArrayList<>(vnfdConnectionPoints);
       vnfdcps.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
 
-      String imageId = getImageIdFromName(vimInstance, image);
+      String imageId = getImageIdFromName(openstackVimInstance, image);
       log.debug("imageId: " + imageId);
       org.openstack4j.model.image.Image imageFromVim = os.images().get(imageId);
       log.trace("Image received from VIM: " + imageFromVim);
       if (imageFromVim == null) {
-        throw new VimException("Not found image " + image + " on VIM " + vimInstance.getName());
+        throw new VimException(
+            "Not found image " + image + " on VIM " + openstackVimInstance.getName());
       } else if (imageFromVim.getStatus() == null
           || imageFromVim.getStatus() != (org.openstack4j.model.image.Image.Status.ACTIVE)) {
         throw new VimException("Image " + image + " is not yet in active. Try again later...");
       }
-      Flavor flavor4j = getFlavorFromName(vimInstance, flavor);
+      Flavor flavor4j = getFlavorFromName(openstackVimInstance, flavor);
       flavor = flavor4j.getId();
-      Optional<? extends AvailabilityZone> availabilityZone = getZone(os, vimInstance);
+      Optional<? extends AvailabilityZone> availabilityZone = getZone(os, openstackVimInstance);
       ServerCreate sc;
       // name, flavor, imageId, user-data and network are mandatory
       ServerCreateBuilder serverCreateBuilder =
@@ -249,6 +248,9 @@ public class OpenStack4JDriver extends VimDriver {
 
       // check if keypair is not null and is not equal empty string
       if (keypair != null && !keypair.equals("")) {
+        if (openstackVimInstance.getKeys().stream().noneMatch(k -> k.getName().equals(keypair))) {
+          throw new VimDriverException(String.format("Keypair %s not found!", keypair));
+        }
         serverCreateBuilder.keypairName(keypair);
       }
 
@@ -348,6 +350,19 @@ public class OpenStack4JDriver extends VimDriver {
     return server;
   }
 
+  @Override
+  public Server launchInstance(
+      BaseVimInstance vimInstance,
+      String name,
+      String image,
+      String flavor,
+      String keypair,
+      Set<VNFDConnectionPoint> vnfdConnectionPoints,
+      Set<String> secGroup,
+      String userData) {
+    return null;
+  }
+
   private boolean allowsAllSourceAddresses(VNFDConnectionPoint cp) {
     return cp.getMetadata() != null
         && cp.getMetadata().containsKey("allowAllSourceAddresses")
@@ -371,8 +386,7 @@ public class OpenStack4JDriver extends VimDriver {
         .findFirst();
   }
 
-  private Optional<? extends AvailabilityZone> getZone(OSClient os, BaseVimInstance vimInstance)
-      throws Exception {
+  private Optional<? extends AvailabilityZone> getZone(OSClient os, BaseVimInstance vimInstance) {
     String az = vimInstance.getMetadata().get("az");
     if (az == null) return Optional.empty();
     log.debug("Looking for availability zone with name: " + az);
@@ -400,49 +414,10 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Flavor with name " + flavor + " was not found");
   }
 
-  private List<String> getNetworkIdsFromNames(
-      OSClient os, String tenantId, List<VNFDConnectionPoint> vnfdConnectionPoints)
-      throws VimDriverException {
-    List<String> res = new LinkedList<>();
-
-    for (VNFDConnectionPoint vnfdConnectionPoint : vnfdConnectionPoints) {
-      if (vnfdConnectionPoint.getFixedIp() == null || vnfdConnectionPoint.getFixedIp().equals("")) {
-        if (vnfdConnectionPoint.getVirtual_link_reference_id() != null
-            && !vnfdConnectionPoint.getVirtual_link_reference_id().equals("")) {
-          res.add(vnfdConnectionPoint.getVirtual_link_reference_id());
-        } else {
-          List<? extends org.openstack4j.model.network.Network> networkList =
-              os.networking().network().list();
-          boolean networkExists = false;
-          for (org.openstack4j.model.network.Network network4j : networkList) {
-            log.trace("Network " + network4j.getName() + " is shared? " + network4j.isShared());
-            if ((vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getName())
-                    || vnfdConnectionPoint.getVirtual_link_reference().equals(network4j.getId()))
-                && (network4j.getTenantId().equals(tenantId) || network4j.isShared())) {
-              if (!res.contains(network4j.getId())) {
-                res.add(network4j.getId());
-                networkExists = true;
-                break;
-              }
-            }
-          }
-          if (!networkExists) {
-            throw new VimDriverException(
-                "Not found Network '"
-                    + vnfdConnectionPoint.getVirtual_link_reference()
-                    + "'. Consider to refresh the VIM manually and try again ...");
-          }
-        }
-      }
-    }
-    log.debug("Found external network id without fixed ip: " + res);
-    return res;
-  }
-
   private String getImageIdFromName(BaseVimInstance vimInstance, String imageName)
       throws VimDriverException {
     log.info("Getting image id of " + imageName + " on " + vimInstance.getName());
-    OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
+    //    OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
     for (BaseNfvImage image4j : this.listImages(vimInstance)) {
       if (((NFVImage) image4j).getName().equals(imageName)
           || image4j.getExtId().equals(imageName)) {
@@ -452,22 +427,15 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Not found image '" + imageName + "' on " + vimInstance.getName());
   }
 
-  private List<NetFloatingIP> listFloatingIps(OSClient os, BaseVimInstance vimInstance)
-      throws VimDriverException {
-    OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
-    log.info("Listing all floating IPs of " + vimInstance.getName());
+  private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId) {
     List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
 
     List<NetFloatingIP> res = new ArrayList<>();
     for (NetFloatingIP floatingIP : floatingIPs) {
-      if (isV3API(vimInstance) && floatingIP.getTenantId().equals(openstackVimInstance.getTenant())
-          || (!isV3API(vimInstance)
-              && floatingIP
-                  .getTenantId()
-                  .equals(getTenantIdFromName(os, openstackVimInstance.getTenant())))) {
-        if (floatingIP.getFixedIpAddress() == null || floatingIP.getFixedIpAddress().equals("")) {
-          res.add(floatingIP);
-        }
+      if (floatingIP.getTenantId().equals(tenantId)
+          && (floatingIP.getFixedIpAddress() == null
+              || floatingIP.getFixedIpAddress().equals(""))) {
+        res.add(floatingIP);
       }
     }
     return res;
@@ -608,7 +576,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private Subnet getSubnetById(OSClient os, BaseVimInstance vimInstance, String subnetId)
-      throws VimDriverException, NotFoundException {
+      throws VimDriverException {
     log.debug(
         "Getting Subnet with extId: "
             + subnetId
@@ -702,7 +670,7 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public Server launchInstanceAndWait(
       BaseVimInstance vimInstance,
-      String name,
+      String instanceName,
       String image,
       String flavor,
       String keyPair,
@@ -721,12 +689,22 @@ public class OpenStack4JDriver extends VimDriver {
       userdata = "";
     }
     log.trace("Userdata: " + userdata);
+    OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+    OSClient os = this.authenticate(openstackVimInstance);
 
     Server server =
         this.launchInstance(
-            vimInstance, name, image, flavor, keyPair, networks, securityGroups, userdata);
+            os,
+            openstackVimInstance,
+            instanceName,
+            image,
+            flavor,
+            keyPair,
+            networks,
+            securityGroups,
+            userdata);
+    org.openstack4j.model.compute.Server server4j = null;
     try {
-      org.openstack4j.model.compute.Server server4j = null;
       log.info(
           "Deployed VM ( "
               + server.getName()
@@ -735,94 +713,110 @@ public class OpenStack4JDriver extends VimDriver {
               + " in status "
               + server.getStatus());
       while (!bootCompleted) {
-        log.debug("Waiting for VM with hostname: " + name + " to finish the launch");
+        log.debug("Waiting for VM with hostname: " + instanceName + " to finish the launch");
         try {
           Thread.sleep(1000);
         } catch (InterruptedException e) {
           e.printStackTrace();
         }
-        server4j = getServerById(vimInstance, server.getExtId());
+        server4j = getServerById(os, server.getExtId());
         server = Utils.getServer(server4j);
         if (server.getStatus().equalsIgnoreCase("ACTIVE")) {
-          log.debug("Finished deployment of VM with hostname: " + name);
+          log.debug("Finished deployment of VM with hostname: " + instanceName);
           bootCompleted = true;
         }
         if (server.getExtendedStatus().equalsIgnoreCase("ERROR")
             || server.getStatus().equalsIgnoreCase("ERROR")) {
-          log.error("Failed to launch VM with hostname: " + name + " -> " + server4j.getFault());
+          log.error(
+              "Failed to launch VM with hostname: " + instanceName + " -> " + server4j.getFault());
           VimDriverException vimDriverException =
               new VimDriverException(server.getExtendedStatus());
           vimDriverException.setServer(server);
           throw vimDriverException;
         }
       }
-      if (server.getFloatingIps() == null) {
-        server.setFloatingIps(new HashMap<>());
-      }
-      if (floatingIps != null && floatingIps.size() > 0) {
-        OpenStack4JDriver.lock.lock(); // TODO chooseFloating ip is lock but association is parallel
-        log.debug("Assigning FloatingIPs to VM with hostname: " + name);
-        log.debug("FloatingIPs are: " + floatingIps);
-        OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
-        int freeIps = listFloatingIps(this.authenticate(openstackVimInstance), vimInstance).size();
-        int ipsNeeded = floatingIps.size();
-        if (freeIps < ipsNeeded) {
-          log.error(
-              "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
-          log.debug("Getting the pool name of a floating ip pool");
-          for (Map.Entry<String, String> entry : floatingIps.entrySet()) {
-            for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
-              String poolName;
-              if (vnfdConnectionPoint.getChosenPool() != null
-                  && !vnfdConnectionPoint.getChosenPool().equals("")
-                  && entry.getKey().equals(vnfdConnectionPoint.getVirtual_link_reference())) {
-                poolName = vnfdConnectionPoint.getChosenPool();
-              } else {
-                poolName = getIpPoolName(vimInstance);
-              }
-              allocateFloatingIps(vimInstance, poolName, ipsNeeded - freeIps);
-            }
-          }
-        }
-        if (listFloatingIps(this.authenticate(openstackVimInstance), vimInstance).size()
-            >= floatingIps.size()) {
-          for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
-            server
-                .getFloatingIps()
-                .put(
-                    fip.getKey(),
-                    this.translateToNAT(associateFloatingIpToNetwork(vimInstance, server4j, fip)));
-          }
-          log.info(
-              "Assigned FloatingIPs to VM with hostname: "
-                  + name
-                  + " -> FloatingIPs: "
-                  + server.getFloatingIps());
-        } else {
-          log.error(
-              "Cannot assign FloatingIPs to VM with hostname: "
-                  + name
-                  + ". No FloatingIPs left...");
-          VimDriverException exception =
-              new VimDriverException(
-                  "Cannot assign FloatingIPs to VM with hostname: "
-                      + name
-                      + ". No FloatingIPs left...");
-          exception.setServer(server);
-          throw exception;
-        }
-        OpenStack4JDriver.lock.unlock();
-      }
+      associateFloatingIps(
+          os, openstackVimInstance, instanceName, networks, floatingIps, server, server4j);
     } catch (Exception e) {
+      lock.unlock();
       log.error(e.getMessage());
       VimDriverException exception = new VimDriverException(e.getMessage(), e);
       if (server != null) {
         exception.setServer(server);
+      } else if (server4j != null) {
+        exception.setServer(Utils.getServer(server4j));
       }
       throw exception;
     }
     log.info("Finish association of FIPs if any for server: " + server);
     return server;
+  }
+
+  private void associateFloatingIps(
+      OSClient os,
+      OpenstackVimInstance openstackVimInstance,
+      String instanceName,
+      Set<VNFDConnectionPoint> networks,
+      Map<String, String> floatingIps,
+      Server server,
+      org.openstack4j.model.compute.Server server4j)
+      throws VimDriverException, UnknownHostException {
+    if (server.getFloatingIps() == null) {
+      server.setFloatingIps(new HashMap<>());
+    }
+    if (floatingIps != null && floatingIps.size() > 0) {
+      OpenStack4JDriver.lock.lock(); // TODO chooseFloating ip is lock but association is parallel
+      log.debug("Assigning FloatingIPs to VM with hostname: " + instanceName);
+      log.debug("FloatingIPs are: " + floatingIps);
+      String tenantId = getTenantId(openstackVimInstance, os);
+      int freeIps = listFloatingIps(os, tenantId).size();
+      int ipsNeeded = floatingIps.size();
+      if (freeIps < ipsNeeded) {
+        log.error(
+            "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
+        log.debug("Getting the pool name of a floating ip pool");
+        for (Map.Entry<String, String> entry : floatingIps.entrySet()) {
+          for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
+            String poolName;
+            if (vnfdConnectionPoint.getChosenPool() != null
+                && !vnfdConnectionPoint.getChosenPool().equals("")
+                && entry.getKey().equals(vnfdConnectionPoint.getVirtual_link_reference())) {
+              poolName = vnfdConnectionPoint.getChosenPool();
+            } else {
+              poolName = getIpPoolName(openstackVimInstance);
+            }
+            allocateFloatingIps(openstackVimInstance, poolName, ipsNeeded - freeIps);
+          }
+        }
+      }
+      if (listFloatingIps(os, tenantId).size() >= floatingIps.size()) {
+        for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
+          server
+              .getFloatingIps()
+              .put(
+                  fip.getKey(),
+                  this.translateToNAT(associateFloatingIpToNetwork(os, tenantId, server4j, fip)));
+        }
+        log.info(
+            "Assigned FloatingIPs to VM with hostname: "
+                + instanceName
+                + " -> FloatingIPs: "
+                + server.getFloatingIps());
+      } else {
+        log.error(
+            "Cannot assign FloatingIPs to VM with hostname: "
+                + instanceName
+                + ". No FloatingIPs left...");
+        VimDriverException exception =
+            new VimDriverException(
+                "Cannot assign FloatingIPs to VM with hostname: "
+                    + instanceName
+                    + ". No FloatingIPs left...");
+        exception.setServer(server);
+        throw exception;
+      }
+      OpenStack4JDriver.lock.unlock();
+    }
   }
 
   private String translateToNAT(String floatingIp) throws UnknownHostException {
@@ -873,7 +867,7 @@ public class OpenStack4JDriver extends VimDriver {
         byte[] netaddress = InetAddress.getByName(subnetInfoTo.getNetworkAddress()).getAddress();
         String[] result = new String[4];
         for (int i = 0; i < netaddress.length; i++) {
-          int intValue = new Byte((byte) (netaddress[i] | Byte.valueOf(host[i]))).intValue();
+          int intValue = Byte.valueOf((byte) (netaddress[i] | host[i])).intValue();
           if (intValue < 0) intValue = intValue & 0xFF;
           result[i] = String.valueOf(intValue);
         }
@@ -884,24 +878,22 @@ public class OpenStack4JDriver extends VimDriver {
     return floatingIp;
   }
 
-  private org.openstack4j.model.compute.Server getServerById(
-      BaseVimInstance vimInstance, String extId) throws VimDriverException {
-    OSClient os = authenticate((OpenstackVimInstance) vimInstance);
+  private org.openstack4j.model.compute.Server getServerById(OSClient os, String extId) {
     return os.compute().servers().get(extId);
   }
 
   private String associateFloatingIpToNetwork(
-      BaseVimInstance vimInstance,
+      OSClient os,
+      String tenantId,
       org.openstack4j.model.compute.Server server4j,
       Map.Entry<String, String> fip)
       throws VimDriverException {
 
-    OSClient os = authenticate((OpenstackVimInstance) vimInstance);
-
     boolean success = true;
     String floatingIpAddress = "";
     for (Address privateIp : server4j.getAddresses().getAddresses().get(fip.getKey())) {
-      floatingIpAddress = findFloatingIpId(os, fip.getValue(), vimInstance).getFloatingIpAddress();
+      floatingIpAddress =
+          findFloatingIpAddress(os, fip.getValue(), tenantId).getFloatingIpAddress();
       success =
           success
               && os.compute()
@@ -917,10 +909,10 @@ public class OpenStack4JDriver extends VimDriver {
         "Not able to associate fip " + fip + " to instance " + server4j.getName());
   }
 
-  private NetFloatingIP findFloatingIpId(OSClient os, String fipValue, BaseVimInstance vimInstance)
+  private NetFloatingIP findFloatingIpAddress(OSClient os, String fipValue, String tenantId)
       throws VimDriverException {
     if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals("")) {
-      return listFloatingIps(os, vimInstance).get(0);
+      return listFloatingIps(os, tenantId).get(0);
     }
     for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
       if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
@@ -1152,14 +1144,12 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public BaseNfvImage updateImage(BaseVimInstance vimInstance, BaseNfvImage image)
-      throws VimDriverException {
+  public BaseNfvImage updateImage(BaseVimInstance vimInstance, BaseNfvImage image) {
     return null;
   }
 
   @Override
-  public BaseNfvImage copyImage(BaseVimInstance vimInstance, BaseNfvImage image, byte[] imageFile)
-      throws VimDriverException {
+  public BaseNfvImage copyImage(BaseVimInstance vimInstance, BaseNfvImage image, byte[] imageFile) {
     return null;
   }
 
@@ -1172,7 +1162,7 @@ public class OpenStack4JDriver extends VimDriver {
 
   @Override
   public DeploymentFlavour updateFlavor(
-      BaseVimInstance vimInstance, DeploymentFlavour deploymentFlavour) throws VimDriverException {
+      BaseVimInstance vimInstance, DeploymentFlavour deploymentFlavour) {
     return null;
   }
 
@@ -1211,26 +1201,23 @@ public class OpenStack4JDriver extends VimDriver {
 
   //TODO need to chage byte[] to stream, at least...
   @Override
-  public BaseNfvImage addImage(BaseVimInstance vimInstance, BaseNfvImage image, byte[] imageFile)
-      throws VimDriverException {
+  public BaseNfvImage addImage(BaseVimInstance vimInstance, BaseNfvImage image, byte[] imageFile) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public BaseNetwork updateNetwork(BaseVimInstance vimInstance, BaseNetwork network)
-      throws VimDriverException {
+  public BaseNetwork updateNetwork(BaseVimInstance vimInstance, BaseNetwork network) {
     return null;
   }
 
   @Override
-  public Subnet updateSubnet(BaseVimInstance vimInstance, BaseNetwork updatedNetwork, Subnet subnet)
-      throws VimDriverException {
+  public Subnet updateSubnet(
+      BaseVimInstance vimInstance, BaseNetwork updatedNetwork, Subnet subnet) {
     return null;
   }
 
   @Override
-  public List<String> getSubnetsExtIds(BaseVimInstance vimInstance, String network_extId)
-      throws VimDriverException {
+  public List<String> getSubnetsExtIds(BaseVimInstance vimInstance, String network_extId) {
     return null;
   }
 
@@ -1265,7 +1252,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   @Override
-  public String getType(BaseVimInstance vimInstance) throws VimDriverException {
+  public String getType(BaseVimInstance vimInstance) {
     return "openstack";
   }
 }
