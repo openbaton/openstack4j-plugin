@@ -27,14 +27,19 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -616,44 +621,99 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public BaseVimInstance refresh(BaseVimInstance vimInstance) throws VimDriverException {
     OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+    log.info(String.format("Refreshing vim instance: %s", openstackVimInstance.getName()));
+    ExecutorService executor = Executors.newFixedThreadPool(5);
 
-    List<BaseNfvImage> newImages = listImages(vimInstance);
-    if (openstackVimInstance.getImages() == null) {
-      openstackVimInstance.setImages(new HashSet<>());
+    final Exception[] e = new Exception[5];
+    executor.execute(
+        () -> {
+          List<BaseNfvImage> newImages;
+          try {
+            newImages = listImages(vimInstance);
+          } catch (VimDriverException e1) {
+            e[0] = e1;
+            return;
+          }
+          if (openstackVimInstance.getImages() == null) {
+            openstackVimInstance.setImages(new HashSet<>());
+          }
+          openstackVimInstance.getImages().clear();
+          openstackVimInstance.addAllImages(newImages);
+        });
+    executor.execute(
+        () -> {
+          List<BaseNetwork> newNetworks;
+          try {
+            newNetworks = listNetworks(vimInstance);
+          } catch (VimDriverException e1) {
+            e[1] = e1;
+            return;
+          }
+
+          if (openstackVimInstance.getNetworks() == null) {
+            openstackVimInstance.setNetworks(new HashSet<>());
+          }
+          openstackVimInstance.getNetworks().clear();
+          openstackVimInstance.addAllNetworks(newNetworks);
+        });
+    executor.execute(
+        () -> {
+          List<DeploymentFlavour> newFlavors;
+          try {
+            newFlavors = listFlavors(vimInstance);
+          } catch (VimDriverException e1) {
+            e[2] = e1;
+            return;
+          }
+          if (openstackVimInstance.getFlavours() == null) {
+            openstackVimInstance.setFlavours(new HashSet<>());
+          }
+          openstackVimInstance.getFlavours().clear();
+          openstackVimInstance.getFlavours().addAll(newFlavors);
+        });
+    executor.execute(
+        () -> {
+          List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> newAvalabilityZones;
+          try {
+            newAvalabilityZones = listAvailabilityZone(vimInstance);
+          } catch (VimDriverException e1) {
+            e[3] = e1;
+            return;
+          }
+          if (openstackVimInstance.getZones() == null) {
+            openstackVimInstance.setZones(new HashSet<>());
+          }
+          openstackVimInstance.getZones().clear();
+          openstackVimInstance.getZones().addAll(newAvalabilityZones);
+        });
+    executor.execute(
+        () -> {
+          List<PopKeypair> keys;
+          try {
+            keys = listKeys(openstackVimInstance);
+          } catch (VimDriverException e1) {
+            e[4] = e1;
+            return;
+          }
+          if (openstackVimInstance.getKeys() == null) {
+            openstackVimInstance.setKeys(new HashSet<>());
+          }
+          openstackVimInstance.getKeys().clear();
+          openstackVimInstance.getKeys().addAll(keys);
+        });
+    executor.shutdown();
+    try {
+      if (!executor.awaitTermination(300, TimeUnit.SECONDS)) {
+        throw new VimDriverException(
+            "Timeout waiting for the refresh, probably openstack will never answer...");
+      }
+    } catch (InterruptedException e1) {
+      e1.printStackTrace();
     }
-    openstackVimInstance.getImages().clear();
-    openstackVimInstance.addAllImages(newImages);
-
-    List<BaseNetwork> newNetworks = listNetworks(vimInstance);
-
-    if (openstackVimInstance.getNetworks() == null) {
-      openstackVimInstance.setNetworks(new HashSet<>());
+    Optional<Exception> exception = Arrays.stream(e).filter(Objects::nonNull).findAny();
+    if (exception.isPresent()) {
+      throw new VimDriverException("Error refreshing vim", exception.get());
     }
-    openstackVimInstance.getNetworks().clear();
-    openstackVimInstance.addAllNetworks(newNetworks);
-
-    List<DeploymentFlavour> newFlavors = listFlavors(vimInstance);
-    if (openstackVimInstance.getFlavours() == null) {
-      openstackVimInstance.setFlavours(new HashSet<>());
-    }
-    openstackVimInstance.getFlavours().clear();
-    openstackVimInstance.getFlavours().addAll(newFlavors);
-
-    List<org.openbaton.catalogue.nfvo.viminstances.AvailabilityZone> newAvalabilityZones =
-        listAvailabilityZone(vimInstance);
-    if (openstackVimInstance.getZones() == null) {
-      openstackVimInstance.setZones(new HashSet<>());
-    }
-    openstackVimInstance.getZones().clear();
-    openstackVimInstance.getZones().addAll(newAvalabilityZones);
-
-    List<PopKeypair> keys = listKeys(openstackVimInstance);
-    if (openstackVimInstance.getKeys() == null) {
-      openstackVimInstance.setKeys(new HashSet<>());
-    }
-    openstackVimInstance.getKeys().clear();
-    openstackVimInstance.getKeys().addAll(keys);
-
     return openstackVimInstance;
   }
 
