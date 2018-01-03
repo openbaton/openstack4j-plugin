@@ -249,6 +249,7 @@ public class OpenStack4JDriver extends VimDriver {
               .name(name)
               .flavor(flavor)
               .image(imageId)
+              .configDrive(true)
               .userData(new String(Base64.encodeBase64(userData.getBytes())));
 
       // check if keypair is not null and is not equal empty string
