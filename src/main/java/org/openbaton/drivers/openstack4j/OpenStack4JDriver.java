@@ -264,7 +264,13 @@ public class OpenStack4JDriver extends VimDriver {
       availabilityZone.ifPresent(zone -> serverCreateBuilder.availabilityZone(zone.getZoneName()));
 
       // temporary workaround for getting first security group as it seems not supported adding multiple security groups
-      secGroup.forEach(serverCreateBuilder::addSecurityGroup);
+
+      os.compute()
+          .securityGroups()
+          .list()
+          .stream()
+          .filter(sg -> secGroup.contains(sg.getName()))
+          .forEach(sg -> serverCreateBuilder.addSecurityGroup(sg.getName()));
 
       // creating ServerCreate object
       sc = serverCreateBuilder.build();
