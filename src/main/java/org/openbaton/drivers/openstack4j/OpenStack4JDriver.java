@@ -1126,13 +1126,40 @@ public class OpenStack4JDriver extends VimDriver {
   @Override
   public void deleteServerByIdAndWait(BaseVimInstance vimInstance, String id)
       throws VimDriverException {
-    OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
+    OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+    OSClient os = this.authenticate(openstackVimInstance);
     /* I suppose that checking for the result waits also for the effectivness of the operation */
+    if (Boolean.parseBoolean(properties.getProperty("deallocate-floating-ip", "true"))) {
+      org.openstack4j.model.compute.Server server = os.compute().servers().get(id);
+      server
+          .getAddresses()
+          .getAddresses()
+          .forEach(
+              (k, v) -> {
+                v.forEach(
+                    ip -> {
+                      log.debug(String.format("Ip %s is of type: %s", ip.getAddr(), ip.getType()));
+                      if (ip.getType().contains("floating")) {
+                        os.compute().floatingIps().removeFloatingIP(id, ip.getAddr());
+                        try {
+                          os.networking()
+                              .floatingip()
+                              .delete(
+                                  this.findFloatingIpAddress(
+                                          os, ip.getAddr(), getTenantId(openstackVimInstance, os))
+                                      .getId());
+                        } catch (VimDriverException e) {
+                          e.printStackTrace();
+                        }
+                      }
+                    });
+              });
+    }
     log.info(
         "Deleting VM with id "
             + id
             + ", result is: "
-            + os.compute().servers().delete(id).isSuccess());
+            + (os.compute().servers().delete(id).isSuccess() ? "Success" : "Failure!"));
   }
 
   @Override
