@@ -84,8 +84,10 @@ import org.openstack4j.model.network.AttachInterfaceType;
 import org.openstack4j.model.network.IPVersionType;
 import org.openstack4j.model.network.NetFloatingIP;
 import org.openstack4j.model.network.NetQuota;
+import org.openstack4j.model.network.Port;
 import org.openstack4j.model.network.Router;
 import org.openstack4j.model.network.RouterInterface;
+import org.openstack4j.model.network.options.PortListOptions;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -432,14 +434,65 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Not found image '" + imageName + "' on " + vimInstance.getName());
   }
 
+  private String getExternalNetworkId(OSClient os, String internalNetworkName) throws Exception {
+    String internalNetworkId = "";
+    List<? extends org.openstack4j.model.network.Network> networks =
+        os.networking().network().list();
+
+    log.debug("internal network name: " + internalNetworkName);
+
+    for (org.openstack4j.model.network.Network network : networks) {
+      //log.debug(" network "  + network);
+      if (network.getName().equals(internalNetworkName)) {
+        internalNetworkId = network.getId();
+        break;
+      }
+    }
+
+    if (internalNetworkId.equals("")) {
+      throw new Exception("the internal network name is invalid");
+    }
+
+    PortListOptions options =
+        PortListOptions.create()
+            .networkId(internalNetworkId)
+            .deviceOwner("network:router_interface");
+    List<? extends Port> ports = os.networking().port().list(options);
+    //log.debug("port is " + ports);
+
+    // major ASSUMPTION:  There will only be ONE router connected to a given internal network
+    Router router = os.networking().router().get(ports.get(0).getDeviceId());
+    log.debug("router id is " + router);
+
+    String externalRouterId = router.getExternalGatewayInfo().getNetworkId();
+    log.debug("externalRouterId is : " + externalRouterId);
+    return externalRouterId;
+  }
+
   private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId) {
+    return listFloatingIps(os, tenantId, "");
+  }
+
+  private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId, String networkName) {
+    List<NetFloatingIP> res = new ArrayList<>();
     List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
 
-    List<NetFloatingIP> res = new ArrayList<>();
+    String externalNetworkId = "";
+    if (!networkName.equals("")) {
+      try {
+        externalNetworkId = getExternalNetworkId(os, networkName);
+        log.debug("External network id : " + externalNetworkId);
+      } catch (Exception e) {
+        log.error(e.getMessage(), e);
+        return res;
+      }
+    }
+
     for (NetFloatingIP floatingIP : floatingIPs) {
       if (floatingIP.getTenantId().equals(tenantId)
-          && (floatingIP.getFixedIpAddress() == null
-              || floatingIP.getFixedIpAddress().equals(""))) {
+          && (floatingIP.getFixedIpAddress() == null || floatingIP.getFixedIpAddress().equals(""))
+          && (floatingIP.getFloatingNetworkId().equals(externalNetworkId)
+              || networkName.equals(""))) {
         res.add(floatingIP);
       }
     }
@@ -825,57 +878,42 @@ public class OpenStack4JDriver extends VimDriver {
       server.setFloatingIps(new HashMap<>());
     }
     if (floatingIps != null && floatingIps.size() > 0) {
-      OpenStack4JDriver.lock.lock(); // TODO chooseFloating ip is lock but association is parallel
       log.debug("Assigning FloatingIPs to VM with hostname: " + instanceName);
       log.debug("FloatingIPs are: " + floatingIps);
       String tenantId = getTenantId(openstackVimInstance, os);
-      int freeIps = listFloatingIps(os, tenantId).size();
-      int ipsNeeded = floatingIps.size();
-      if (freeIps < ipsNeeded) {
-        log.error(
-            "Insufficient number of ips allocated to tenant, will try to allocate more ips from pool");
-        log.debug("Getting the pool name of a floating ip pool");
-        for (Map.Entry<String, String> entry : floatingIps.entrySet()) {
-          for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
-            String poolName;
-            if (vnfdConnectionPoint.getChosenPool() != null
-                && !vnfdConnectionPoint.getChosenPool().equals("")
-                && entry.getKey().equals(vnfdConnectionPoint.getVirtual_link_reference())) {
-              poolName = vnfdConnectionPoint.getChosenPool();
-            } else {
-              poolName = getIpPoolName(openstackVimInstance);
-            }
-            allocateFloatingIps(openstackVimInstance, poolName, ipsNeeded - freeIps);
-          }
-        }
+      for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
+
+        Optional<VNFDConnectionPoint> optionalConnectionPoint =
+            networks
+                .stream()
+                .filter(cp -> cp.getVirtual_link_reference().equals(fip.getKey()))
+                .findFirst();
+        assert optionalConnectionPoint.isPresent();
+        VNFDConnectionPoint vnfdConnectionPoint = optionalConnectionPoint.get();
+        server
+            .getFloatingIps()
+            .put(
+                fip.getKey(),
+                this.translateToNAT(
+                    associateFloatingIpToNetwork(os, tenantId, server4j, vnfdConnectionPoint)));
       }
-      if (listFloatingIps(os, tenantId).size() >= floatingIps.size()) {
-        for (Map.Entry<String, String> fip : floatingIps.entrySet()) {
-          server
-              .getFloatingIps()
-              .put(
-                  fip.getKey(),
-                  this.translateToNAT(associateFloatingIpToNetwork(os, tenantId, server4j, fip)));
-        }
-        log.info(
-            "Assigned FloatingIPs to VM with hostname: "
-                + instanceName
-                + " -> FloatingIPs: "
-                + server.getFloatingIps());
-      } else {
-        log.error(
-            "Cannot assign FloatingIPs to VM with hostname: "
-                + instanceName
-                + ". No FloatingIPs left...");
-        VimDriverException exception =
-            new VimDriverException(
-                "Cannot assign FloatingIPs to VM with hostname: "
-                    + instanceName
-                    + ". No FloatingIPs left...");
-        exception.setServer(server);
-        throw exception;
-      }
-      OpenStack4JDriver.lock.unlock();
+      log.info(
+          "Assigned FloatingIPs to VM with hostname: "
+              + instanceName
+              + " -> FloatingIPs: "
+              + server.getFloatingIps());
+    } else {
+      log.error(
+          "Cannot assign FloatingIPs to VM with hostname: "
+              + instanceName
+              + ". No FloatingIPs left...");
+      VimDriverException exception =
+          new VimDriverException(
+              "Cannot assign FloatingIPs to VM with hostname: "
+                  + instanceName
+                  + ". No FloatingIPs left...");
+      exception.setServer(server);
+      throw exception;
     }
   }
 
@@ -946,14 +984,49 @@ public class OpenStack4JDriver extends VimDriver {
       OSClient os,
       String tenantId,
       org.openstack4j.model.compute.Server server4j,
-      Map.Entry<String, String> fip)
+      VNFDConnectionPoint vnfdConnectionPoint)
       throws VimDriverException {
+
+    String poolName = "";
+
+    // allocate another floating ip if needed
+    try {
+      OpenStack4JDriver.lock.lock();
+      if ((vnfdConnectionPoint.getFloatingIp().trim().equalsIgnoreCase("random")
+              || vnfdConnectionPoint.getFloatingIp().trim().equals(""))
+          && (listFloatingIps(os, tenantId, vnfdConnectionPoint.getVirtual_link_reference()).size()
+              <= 0)) {
+        log.debug("Allocating a new floating ip");
+
+        if (vnfdConnectionPoint.getChosenPool() != null
+            && !vnfdConnectionPoint.getChosenPool().equals("")) {
+          poolName = vnfdConnectionPoint.getChosenPool();
+        } else {
+          try {
+            String extNetworkId =
+                getExternalNetworkId(os, vnfdConnectionPoint.getVirtual_link_reference());
+            log.debug("external network: " + os.networking().network().get(extNetworkId));
+            poolName = os.networking().network().get(extNetworkId).getName();
+          } catch (Exception e) {
+            log.error(e.getMessage());
+          }
+        }
+        os.compute().floatingIps().allocateIP(poolName);
+      }
+    } finally {
+      OpenStack4JDriver.lock.unlock();
+    }
 
     boolean success = true;
     String floatingIpAddress = "";
-    for (Address privateIp : server4j.getAddresses().getAddresses().get(fip.getKey())) {
+    for (Address privateIp :
+        server4j
+            .getAddresses()
+            .getAddresses()
+            .get(vnfdConnectionPoint.getVirtual_link_reference())) {
       floatingIpAddress =
-          findFloatingIpAddress(os, fip.getValue(), tenantId).getFloatingIpAddress();
+          findFloatingIpAddress(os, vnfdConnectionPoint.getFloatingIp(), tenantId)
+              .getFloatingIpAddress();
       success =
           success
               && os.compute()
@@ -966,7 +1039,10 @@ public class OpenStack4JDriver extends VimDriver {
       return floatingIpAddress;
     }
     throw new VimDriverException(
-        "Not able to associate fip " + fip + " to instance " + server4j.getName());
+        "Not able to associate fip "
+            + vnfdConnectionPoint.getFloatingIp()
+            + " to instance "
+            + server4j.getName());
   }
 
   private NetFloatingIP findFloatingIpAddress(OSClient os, String fipValue, String tenantId)
