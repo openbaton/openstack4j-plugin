@@ -1253,7 +1253,7 @@ public class OpenStack4JDriver extends VimDriver {
                 Builders.flavor()
                     .name(deploymentFlavour.getFlavour_key())
                     .disk(deploymentFlavour.getDisk())
-                    .isPublic(false)
+                    .isPublic(true)
                     .ram(deploymentFlavour.getRam())
                     .vcpus(deploymentFlavour.getVcpus())
                     .build());
