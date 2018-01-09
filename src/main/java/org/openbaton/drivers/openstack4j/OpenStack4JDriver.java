@@ -863,8 +863,7 @@ public class OpenStack4JDriver extends VimDriver {
           throw vimDriverException;
         }
       }
-      associateFloatingIps(
-          os, openstackVimInstance, instanceName, networks, floatingIps, server, server4j);
+      associateFloatingIps(os, openstackVimInstance, instanceName, networks, server, server4j);
     } catch (Exception e) {
       lock.unlock();
       log.error(e.getMessage());
@@ -885,19 +884,18 @@ public class OpenStack4JDriver extends VimDriver {
       OpenstackVimInstance openstackVimInstance,
       String instanceName,
       Set<VNFDConnectionPoint> networks,
-      Map<String, String> floatingIps,
       Server server,
       org.openstack4j.model.compute.Server server4j)
       throws VimDriverException, UnknownHostException {
     if (server.getFloatingIps() == null) {
       server.setFloatingIps(new HashMap<>());
     }
-    if (floatingIps != null && floatingIps.size() > 0) {
-      log.debug("Assigning FloatingIPs to VM with hostname: " + instanceName);
-      log.debug("FloatingIPs are: " + floatingIps);
-      String tenantId = getTenantId(openstackVimInstance, os);
+    log.debug("Assigning FloatingIPs to VM with hostname: " + instanceName);
+    String tenantId = getTenantId(openstackVimInstance, os);
 
-      for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
+    for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
+      log.debug("connection point is: " + vnfdConnectionPoint);
+      if (null != vnfdConnectionPoint.getFloatingIp()) {
         server
             .getFloatingIps()
             .put(
@@ -905,12 +903,12 @@ public class OpenStack4JDriver extends VimDriver {
                 this.translateToNAT(
                     associateFloatingIpToNetwork(os, tenantId, server4j, vnfdConnectionPoint)));
       }
-      log.info(
-          "Assigned FloatingIPs to VM with hostname: "
-              + instanceName
-              + " -> FloatingIPs: "
-              + server.getFloatingIps());
     }
+    log.info(
+        "Assigned FloatingIPs to VM with hostname: "
+            + instanceName
+            + " -> FloatingIPs: "
+            + server.getFloatingIps());
   }
 
   private String translateToNAT(String floatingIp) throws UnknownHostException {
