@@ -896,12 +896,17 @@ public class OpenStack4JDriver extends VimDriver {
     for (VNFDConnectionPoint vnfdConnectionPoint : networks) {
       log.debug("connection point is: " + vnfdConnectionPoint);
       if (null != vnfdConnectionPoint.getFloatingIp()) {
-        server
-            .getFloatingIps()
-            .put(
-                vnfdConnectionPoint.getFloatingIp(),
-                this.translateToNAT(
-                    associateFloatingIpToNetwork(os, tenantId, server4j, vnfdConnectionPoint)));
+        try {
+          OpenStack4JDriver.lock.lock();
+          server
+              .getFloatingIps()
+              .put(
+                  vnfdConnectionPoint.getFloatingIp(),
+                  this.translateToNAT(
+                      associateFloatingIpToNetwork(os, tenantId, server4j, vnfdConnectionPoint)));
+        } finally {
+          OpenStack4JDriver.lock.unlock();
+        }
       }
     }
     log.info(
@@ -984,32 +989,28 @@ public class OpenStack4JDriver extends VimDriver {
     String poolName = "";
 
     // allocate another floating ip if needed
-    try {
-      OpenStack4JDriver.lock.lock();
-      if ((vnfdConnectionPoint.getFloatingIp().trim().equalsIgnoreCase("random")
-              || vnfdConnectionPoint.getFloatingIp().trim().equals(""))
-          && (listFloatingIps(os, tenantId, vnfdConnectionPoint.getVirtual_link_reference()).size()
-              <= 0)) {
-        log.debug("Allocating a new floating ip");
 
-        if (vnfdConnectionPoint.getChosenPool() != null
-            && !vnfdConnectionPoint.getChosenPool().equals("")) {
-          poolName = vnfdConnectionPoint.getChosenPool();
-        } else {
-          try {
-            String extNetworkId =
-                getExternalNetworkId(os, vnfdConnectionPoint.getVirtual_link_reference());
-            log.debug("external network: " + os.networking().network().get(extNetworkId));
-            poolName = os.networking().network().get(extNetworkId).getName();
-          } catch (Exception e) {
-            log.error(e.getMessage());
-          }
+    if ((vnfdConnectionPoint.getFloatingIp().trim().equalsIgnoreCase("random")
+            || vnfdConnectionPoint.getFloatingIp().trim().equals(""))
+        && (listFloatingIps(os, tenantId, vnfdConnectionPoint.getVirtual_link_reference()).size()
+            <= 0)) {
+      log.debug("Allocating a new floating ip");
+
+      if (vnfdConnectionPoint.getChosenPool() != null
+          && !vnfdConnectionPoint.getChosenPool().equals("")) {
+        poolName = vnfdConnectionPoint.getChosenPool();
+      } else {
+        try {
+          String extNetworkId =
+              getExternalNetworkId(os, vnfdConnectionPoint.getVirtual_link_reference());
+          log.debug("external network: " + os.networking().network().get(extNetworkId));
+          poolName = os.networking().network().get(extNetworkId).getName();
+        } catch (Exception e) {
+          log.error(e.getMessage());
         }
-        log.debug("pool name is " + poolName);
-        os.compute().floatingIps().allocateIP(poolName);
       }
-    } finally {
-      OpenStack4JDriver.lock.unlock();
+      log.debug("pool name is " + poolName);
+      os.compute().floatingIps().allocateIP(poolName);
     }
 
     boolean success = true;
