@@ -1020,8 +1020,9 @@ public class OpenStack4JDriver extends VimDriver {
             .getAddresses()
             .getAddresses()
             .get(vnfdConnectionPoint.getVirtual_link_reference())) {
+      // assuming that the poolName is equal to the network name. TODO find a better approach
       floatingIpAddress =
-          findFloatingIpAddress(os, vnfdConnectionPoint.getFloatingIp(), tenantId)
+          findFloatingIpAddress(os, vnfdConnectionPoint.getFloatingIp(), tenantId, vnfdConnectionPoint.getVirtual_link_reference())
               .getFloatingIpAddress();
       success =
           success
@@ -1040,11 +1041,11 @@ public class OpenStack4JDriver extends VimDriver {
             + " to instance "
             + server4j.getName());
   }
-
-  private NetFloatingIP findFloatingIpAddress(OSClient os, String fipValue, String tenantId)
+  
+  private NetFloatingIP findFloatingIpAddress(OSClient os, String fipValue, String tenantId, String poolName)
       throws VimDriverException {
     if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals("")) {
-      return listFloatingIps(os, tenantId).get(0);
+      return listFloatingIps(os, tenantId, poolName).get(0);
     }
     for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
       if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
@@ -1142,7 +1143,7 @@ public class OpenStack4JDriver extends VimDriver {
                               .floatingip()
                               .delete(
                                   this.findFloatingIpAddress(
-                                          os, ip.getAddr(), getTenantId(openstackVimInstance, os))
+                                          os, ip.getAddr(), getTenantId(openstackVimInstance, os), "")
                                       .getId());
                         } catch (VimDriverException e) {
                           e.printStackTrace();
