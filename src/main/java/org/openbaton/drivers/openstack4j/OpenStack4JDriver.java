@@ -237,7 +237,9 @@ public class OpenStack4JDriver extends VimDriver {
       String imageId = getImageIdFromName(openstackVimInstance, image);
       log.debug("Retrieved imageId(" + imageId + ") from image with name " + image);
       org.openstack4j.model.image.Image imageFromVim = os.images().get(imageId);
-      log.trace("Retrieved image object from OpenStack: " + imageFromVim);
+      log.trace(
+          "Retrieved image object from OpenStack: "
+              + new GsonBuilder().setPrettyPrinting().create().toJson(imageFromVim));
       if (imageFromVim == null) {
         throw new VimException(
             "Not found image (name: " + image + ") on PoP " + openstackVimInstance.getName());
@@ -929,7 +931,8 @@ public class OpenStack4JDriver extends VimDriver {
       }
       throw exception;
     }
-    log.info("Finish association of FIPs (if any) for server: " + server);
+    log.info("Virtual Server " + server.getName() + " successfully launched");
+    log.trace(new GsonBuilder().setPrettyPrinting().create().toJson(server));
     return server;
   }
 
@@ -957,7 +960,7 @@ public class OpenStack4JDriver extends VimDriver {
           server
               .getFloatingIps()
               .put(
-                  vnfdConnectionPoint.getFloatingIp(),
+                  vnfdConnectionPoint.getVirtual_link_reference(),
                   this.translateToNAT(
                       associateFloatingIpToNetwork(
                           os, tenantId, server4j, vnfdConnectionPoint, openstackVimInstance)));
@@ -1066,7 +1069,12 @@ public class OpenStack4JDriver extends VimDriver {
                 .getExtId());
       } else {
         extNetworkId = getExternalNetworkId(os, vnfdConnectionPoint.getVirtual_link_reference());
-        log.debug("Retrieved external network: " + os.networking().network().get(extNetworkId));
+        log.debug(
+            "Retrieved external network: "
+                + new GsonBuilder()
+                    .setPrettyPrinting()
+                    .create()
+                    .toJson(os.networking().network().get(extNetworkId)));
         poolName = os.networking().network().get(extNetworkId).getName();
       }
     } catch (Exception e) {
@@ -1189,6 +1197,7 @@ public class OpenStack4JDriver extends VimDriver {
     OSClient os = this.authenticate(openstackVimInstance);
     /* I suppose that checking for the result waits also for the effectivness of the operation */
     if (Boolean.parseBoolean(properties.getProperty("deallocate-floating-ip", "true"))) {
+      log.info("Deallocating floating IP for VM with external id " + id);
       org.openstack4j.model.compute.Server server = os.compute().servers().get(id);
       server
           .getAddresses()
@@ -1197,8 +1206,8 @@ public class OpenStack4JDriver extends VimDriver {
               (k, v) ->
                   v.forEach(
                       ip -> {
-                        log.debug(
-                            String.format("Ip %s is of type: %s", ip.getAddr(), ip.getType()));
+                        log.trace(
+                            String.format("IP %s is of type: %s", ip.getAddr(), ip.getType()));
                         if (ip.getType().contains("floating")) {
                           os.compute().floatingIps().removeFloatingIP(id, ip.getAddr());
                           try {
