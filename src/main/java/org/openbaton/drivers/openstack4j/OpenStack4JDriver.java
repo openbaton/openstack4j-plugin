@@ -18,31 +18,6 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -90,6 +65,32 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class OpenStack4JDriver extends VimDriver {
 
@@ -478,17 +479,10 @@ public class OpenStack4JDriver extends VimDriver {
     Router router = os.networking().router().get(routerPort.getDeviceId());
     log.debug("router is " + router);
 
-    String externalRouterId = router.getExternalGatewayInfo().getNetworkId();
-    return externalRouterId;
+    return router.getExternalGatewayInfo().getNetworkId();
   }
 
-  private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId)
-      throws VimDriverException {
-    return listFloatingIps(os, tenantId, "");
-  }
-
-  private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId, String networkName)
-      throws VimDriverException {
+  private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId, String networkName) {
     List<NetFloatingIP> res = new ArrayList<>();
     List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
 
@@ -865,9 +859,10 @@ public class OpenStack4JDriver extends VimDriver {
       }
       associateFloatingIps(os, openstackVimInstance, instanceName, networks, server, server4j);
     } catch (Exception e) {
-      lock.unlock();
       log.error(e.getMessage());
-      VimDriverException exception = new VimDriverException(e.getMessage(), e);
+      VimDriverException exception;
+      if (!(e instanceof VimDriverException)) exception = new VimDriverException(e.getMessage(), e);
+      else exception = (VimDriverException) e;
       if (server != null) {
         exception.setServer(server);
       } else if (server4j != null) {
@@ -985,7 +980,6 @@ public class OpenStack4JDriver extends VimDriver {
       org.openstack4j.model.compute.Server server4j,
       VNFDConnectionPoint vnfdConnectionPoint)
       throws VimDriverException {
-
     String poolName = "";
 
     // allocate another floating ip if needed
@@ -1022,7 +1016,11 @@ public class OpenStack4JDriver extends VimDriver {
             .get(vnfdConnectionPoint.getVirtual_link_reference())) {
       // assuming that the poolName is equal to the network name. TODO find a better approach
       floatingIpAddress =
-          findFloatingIpAddress(os, vnfdConnectionPoint.getFloatingIp(), tenantId, vnfdConnectionPoint.getVirtual_link_reference())
+          findFloatingIpAddress(
+                  os,
+                  vnfdConnectionPoint.getFloatingIp(),
+                  tenantId,
+                  vnfdConnectionPoint.getVirtual_link_reference())
               .getFloatingIpAddress();
       success =
           success
@@ -1041,37 +1039,19 @@ public class OpenStack4JDriver extends VimDriver {
             + " to instance "
             + server4j.getName());
   }
-  
-  private NetFloatingIP findFloatingIpAddress(OSClient os, String fipValue, String tenantId, String poolName)
-      throws VimDriverException {
+
+  private NetFloatingIP findFloatingIpAddress(
+      OSClient os, String fipValue, String tenantId, String poolName) throws VimDriverException {
     if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals("")) {
       return listFloatingIps(os, tenantId, poolName).get(0);
     }
-    for (NetFloatingIP floatingIP : os.networking().floatingip().list()) {
-      if (floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue)) {
-        return floatingIP;
-      }
-    }
-    throw new VimDriverException("Floating ip " + fipValue + " not found");
-  }
-
-  private void allocateFloatingIps(BaseVimInstance vimInstance, String poolName, int numOfFip)
-      throws VimDriverException {
-    OSClient os = authenticate((OpenstackVimInstance) vimInstance);
-    for (int i = 0; i < numOfFip; i++) {
-      os.compute().floatingIps().allocateIP(poolName);
-    }
-  }
-
-  private String getIpPoolName(BaseVimInstance vimInstance) throws VimDriverException {
-    OSClient os = authenticate((OpenstackVimInstance) vimInstance);
-    List<String> poolNames = os.compute().floatingIps().getPoolNames();
-    log.debug("Available Floating IP pools: " + poolNames);
-    if (!poolNames.isEmpty()) {
-      //TODO select right pool!
-      return poolNames.get(0);
-    }
-    throw new VimDriverException("No pool of floating ips is available");
+    return os.networking()
+        .floatingip()
+        .list()
+        .stream()
+        .filter(floatingIP -> floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue))
+        .findFirst()
+        .orElseThrow(() -> new VimDriverException("Floating ip " + fipValue + " not found"));
   }
 
   @Override
@@ -1132,25 +1112,28 @@ public class OpenStack4JDriver extends VimDriver {
           .getAddresses()
           .getAddresses()
           .forEach(
-              (k, v) -> {
-                v.forEach(
-                    ip -> {
-                      log.debug(String.format("Ip %s is of type: %s", ip.getAddr(), ip.getType()));
-                      if (ip.getType().contains("floating")) {
-                        os.compute().floatingIps().removeFloatingIP(id, ip.getAddr());
-                        try {
-                          os.networking()
-                              .floatingip()
-                              .delete(
-                                  this.findFloatingIpAddress(
-                                          os, ip.getAddr(), getTenantId(openstackVimInstance, os), "")
-                                      .getId());
-                        } catch (VimDriverException e) {
-                          e.printStackTrace();
+              (k, v) ->
+                  v.forEach(
+                      ip -> {
+                        log.debug(
+                            String.format("Ip %s is of type: %s", ip.getAddr(), ip.getType()));
+                        if (ip.getType().contains("floating")) {
+                          os.compute().floatingIps().removeFloatingIP(id, ip.getAddr());
+                          try {
+                            os.networking()
+                                .floatingip()
+                                .delete(
+                                    this.findFloatingIpAddress(
+                                            os,
+                                            ip.getAddr(),
+                                            getTenantId(openstackVimInstance, os),
+                                            "")
+                                        .getId());
+                          } catch (VimDriverException e) {
+                            e.printStackTrace();
+                          }
                         }
-                      }
-                    });
-              });
+                      }));
     }
     log.info(
         "Deleting VM with id "
