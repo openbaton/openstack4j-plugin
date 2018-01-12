@@ -88,6 +88,7 @@ import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Port;
 import org.openstack4j.model.network.Router;
 import org.openstack4j.model.network.RouterInterface;
+import org.openstack4j.model.network.options.PortListOptions;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -470,7 +471,8 @@ public class OpenStack4JDriver extends VimDriver {
     }
 
     // because there are different ways to distinguish that a port is owned by a router get them all and then filter
-    List<? extends Port> ports = os.networking().port().list();
+    PortListOptions options = PortListOptions.create().networkId(internalNetworkId);
+    List<? extends Port> ports = os.networking().port().list(options);
     log.trace("List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
     Port routerPort = null;
 
