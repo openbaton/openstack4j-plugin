@@ -1,5 +1,6 @@
 package org.openbaton.drivers.openstack4j;
 
+import com.google.gson.GsonBuilder;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -36,7 +37,7 @@ class Utils {
   }
 
   static org.openbaton.catalogue.nfvo.Server getServer(Server server4j) {
-    log.debug("Got Server to parse: " + server4j);
+    log.trace("Server: " + new GsonBuilder().setPrettyPrinting().create().toJson(server4j));
     org.openbaton.catalogue.nfvo.Server server = new org.openbaton.catalogue.nfvo.Server();
     server.setName(server4j.getName());
     server.setExtId(server4j.getId());
