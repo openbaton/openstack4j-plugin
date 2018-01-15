@@ -18,6 +18,31 @@ package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -65,32 +90,6 @@ import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.net.InetAddress;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class OpenStack4JDriver extends VimDriver {
 
@@ -279,7 +278,7 @@ public class OpenStack4JDriver extends VimDriver {
         String extNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
         if (extNetId == null) {
           Optional<? extends org.openstack4j.model.network.Network> networkByName =
-              getNetworkByName(
+              getNetworkByNameAndTenantId(
                   os,
                   vnfdConnectionPoint.getVirtual_link_reference(),
                   getTenantId(openstackVimInstance, os));
@@ -287,8 +286,9 @@ public class OpenStack4JDriver extends VimDriver {
           else
             throw new VimDriverException(
                 String.format(
-                    "Network with name %s was not found",
-                    vnfdConnectionPoint.getVirtual_link_reference()));
+                    "Network with name %s and tenant id %s was not found",
+                    vnfdConnectionPoint.getVirtual_link_reference(),
+                    getTenantId(openstackVimInstance, os)));
         }
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
@@ -389,7 +389,7 @@ public class OpenStack4JDriver extends VimDriver {
         : getTenantIdFromName(os, vimInstance.getTenant());
   }
 
-  private Optional<? extends org.openstack4j.model.network.Network> getNetworkByName(
+  private Optional<? extends org.openstack4j.model.network.Network> getNetworkByNameAndTenantId(
       OSClient os, String name, String tenantId) {
     return os.networking()
         .network()
