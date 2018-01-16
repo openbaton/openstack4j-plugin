@@ -287,7 +287,7 @@ public class OpenStack4JDriver extends VimDriver {
         String extNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
         if (extNetId == null) {
           Optional<? extends org.openstack4j.model.network.Network> networkByName =
-              getNetworkByName(
+              getNetworkByNameAndTenantId(
                   os,
                   vnfdConnectionPoint.getVirtual_link_reference(),
                   getTenantId(openstackVimInstance, os));
@@ -295,8 +295,9 @@ public class OpenStack4JDriver extends VimDriver {
           else
             throw new VimDriverException(
                 String.format(
-                    "Network with name %s was not found",
-                    vnfdConnectionPoint.getVirtual_link_reference()));
+                    "Network with name %s and tenant id %s was not found",
+                    vnfdConnectionPoint.getVirtual_link_reference(),
+                    getTenantId(openstackVimInstance, os)));
         }
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
@@ -397,7 +398,7 @@ public class OpenStack4JDriver extends VimDriver {
         : getTenantIdFromName(os, vimInstance.getTenant());
   }
 
-  private Optional<? extends org.openstack4j.model.network.Network> getNetworkByName(
+  private Optional<? extends org.openstack4j.model.network.Network> getNetworkByNameAndTenantId(
       OSClient os, String name, String tenantId) {
     return os.networking()
         .network()
