@@ -285,8 +285,9 @@ public class OpenStack4JDriver extends VimDriver {
 
       for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
         String extNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
+        Optional<? extends org.openstack4j.model.network.Network> networkByName = null;
         if (extNetId == null) {
-          Optional<? extends org.openstack4j.model.network.Network> networkByName =
+          networkByName =
               getNetworkByName(
                   os,
                   vnfdConnectionPoint.getVirtual_link_reference(),
@@ -298,14 +299,72 @@ public class OpenStack4JDriver extends VimDriver {
                     "Network with name %s was not found",
                     vnfdConnectionPoint.getVirtual_link_reference()));
         }
+        // create a port
+        Port port = null;
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
-          sc.addNetwork(extNetId, vnfdConnectionPoint.getFixedIp());
+
+          // get the subnet associated with the network
+          List<String> subnets = null;
+          if (networkByName.isPresent()) {
+            subnets = networkByName.get().getSubnets();
+          } else {
+            org.openstack4j.model.network.Network network = os.networking().network().get(extNetId);
+            subnets = network.getSubnets();
+          }
+
+          if (null == subnets) {
+            throw new VimDriverException(
+                String.format("Cannot find subnets of network with id %s", extNetId));
+          }
+
+          org.openstack4j.model.network.Subnet subnet = null;
+          for (String subnetId : subnets) {
+            subnet = os.networking().subnet().get(subnetId);
+            SubnetUtils utils = new SubnetUtils(subnet.getCidr());
+            if (utils.getInfo().isInRange(vnfdConnectionPoint.getFixedIp())) {
+              break;
+            }
+            subnet = null;
+          }
+
+          if (null == subnet) {
+            throw new VimDriverException(
+                String.format(
+                    "The fixed ip %s is not in the range of any of the subnets"
+                        + " associated with the network with id %s",
+                    vnfdConnectionPoint.getFixedIp(), extNetId));
+          }
+
+          port =
+              os.networking()
+                  .port()
+                  .create(
+                      Builders.port()
+                          .name(buildPortName(vnfdConnectionPoint))
+                          .networkId(extNetId)
+                          .fixedIp(vnfdConnectionPoint.getFixedIp(), subnet.getId())
+                          .build());
+
         } else {
-          sc.addNetwork(extNetId, null);
+          port =
+              os.networking()
+                  .port()
+                  .create(
+                      Builders.port()
+                          .name(buildPortName(vnfdConnectionPoint))
+                          .networkId(extNetId)
+                          .build());
         }
+
+        if (null == port) {
+          throw new VimDriverException("Unable to create port on network with id " + extNetId);
+        }
+        log.debug("created port with id " + port.getId());
+
+        sc.addNetworkPort(port.getId());
       }
-      // createing ServerCreate object
+      // creating ServerCreate object
       sc = serverCreateBuilder.build();
 
       List<String> netIds = new ArrayList<>();
@@ -382,6 +441,10 @@ public class OpenStack4JDriver extends VimDriver {
       Set<String> secGroup,
       String userData) {
     return null;
+  }
+
+  private String buildPortName(VNFDConnectionPoint vnfdConnectionPoint) {
+    return "VNFD-" + vnfdConnectionPoint.getId();
   }
 
   private boolean allowsAllSourceAddresses(VNFDConnectionPoint cp) {
@@ -498,40 +561,41 @@ public class OpenStack4JDriver extends VimDriver {
     return router.getExternalGatewayInfo().getNetworkId();
   }
 
-  //  private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId, String internalNetworkName) {
-  //    List<NetFloatingIP> res = new ArrayList<>();
-  //    String externalNetworkId = "";
-  //    if (!internalNetworkName.equals("")) {
-  //      try {
-  //        externalNetworkId = getExternalNetworkId(os, internalNetworkName);
-  //        log.debug("External network (name: "+internalNetworkName+") id: " + externalNetworkId);
-  //      } catch (Exception e) {
-  //        log.error(e.getMessage(), e);
-  //        return res;
-  //      }
-  //    }
-  //    // assuming that the externalNetwork
-  //    return listFloatingIps(os, tenantId, internalNetworkName, externalNetworkId);
-  //  }
-
   private List<NetFloatingIP> listFloatingIps(
       OSClient os, String tenantId, String internalNetworkName) {
     List<NetFloatingIP> res = new ArrayList<>();
-    List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
-    log.trace(
-        "Retrieved floating IP list: "
-            + new GsonBuilder().setPrettyPrinting().create().toJson(floatingIPs));
-
-    for (NetFloatingIP floatingIP : floatingIPs) {
-      if (floatingIP.getTenantId().equals(tenantId)
-              && (floatingIP.getFixedIpAddress() == null
-                  || floatingIP.getFixedIpAddress().equals(""))
-          || internalNetworkName.equals("")) {
-        res.add(floatingIP);
+    String externalNetworkId = "";
+    if (!internalNetworkName.equals("")) {
+      try {
+        externalNetworkId = getExternalNetworkId(os, internalNetworkName);
+        log.debug("External network (name: " + internalNetworkName + ") id: " + externalNetworkId);
+      } catch (Exception e) {
+        log.error(e.getMessage(), e);
+        return res;
       }
     }
-    return res;
+    // assuming that the externalNetwork
+    return listFloatingIps(os, tenantId, internalNetworkName, externalNetworkId);
   }
+
+  //  private List<NetFloatingIP> listFloatingIps(
+  //      OSClient os, String tenantId, String internalNetworkName) {
+  //    List<NetFloatingIP> res = new ArrayList<>();
+  //    List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
+  //    log.trace(
+  //        "Retrieved floating IP list: "
+  //            + new GsonBuilder().setPrettyPrinting().create().toJson(floatingIPs));
+  //
+  //   for (NetFloatingIP floatingIP : floatingIPs) {
+  //     if (floatingIP.getTenantId().equals(tenantId)
+  //             && (floatingIP.getFixedIpAddress() == null
+  //                 || floatingIP.getFixedIpAddress().equals(""))
+  //         || internalNetworkName.equals("")) {
+  //       res.add(floatingIP);
+  //      }
+  //    }
+  //   return res;
+  // }
 
   private List<NetFloatingIP> listFloatingIps(
       OSClient os, String tenantId, String internalNetworkName, String externalNetworkId) {
@@ -549,6 +613,7 @@ public class OpenStack4JDriver extends VimDriver {
         res.add(floatingIP);
       }
     }
+    log.debug("floating ips being returned: " + res);
     return res;
   }
 
@@ -1078,10 +1143,12 @@ public class OpenStack4JDriver extends VimDriver {
                     .create()
                     .toJson(os.networking().network().get(extNetworkId)));
         poolName = os.networking().network().get(extNetworkId).getName();
+        log.info("pool name is " + poolName);
       }
     } catch (Exception e) {
       log.error(e.getMessage());
     }
+    log.info("vnfdConnectionPoint: " + vnfdConnectionPoint);
     if ((vnfdConnectionPoint.getFloatingIp().trim().equalsIgnoreCase("random")
             || vnfdConnectionPoint.getFloatingIp().trim().equals(""))
         && (listFloatingIps(
@@ -1098,30 +1165,42 @@ public class OpenStack4JDriver extends VimDriver {
       os.compute().floatingIps().allocateIP(poolName);
     }
 
-    boolean success = true;
-    String floatingIpAddress = "";
-    for (Address privateIp :
-        server4j
-            .getAddresses()
-            .getAddresses()
-            .get(vnfdConnectionPoint.getVirtual_link_reference())) {
-      // assuming that the poolName is equal to the network name. TODO find a better approach
-      floatingIpAddress =
-          findFloatingIpAddress(
-                  os,
-                  vnfdConnectionPoint.getFloatingIp(),
-                  tenantId,
-                  vnfdConnectionPoint.getVirtual_link_reference())
-              .getFloatingIpAddress();
-      success =
-          success
-              && os.compute()
-                  .floatingIps()
-                  .addFloatingIP(server4j, privateIp.getAddr(), floatingIpAddress)
-                  .isSuccess();
+    PortListOptions options = PortListOptions.create().name(buildPortName(vnfdConnectionPoint));
+    List<? extends Port> ports = os.networking().port().list(options);
+    log.debug("List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
+
+    if (null == ports || ports.isEmpty()) {
+      throw new VimDriverException(
+          "cannot find the port associated with vnfdConnectionPoint " + vnfdConnectionPoint);
+    } else if (null == ports.get(0).getFixedIps() || ports.get(0).getFixedIps().isEmpty()) {
+      throw new VimDriverException(
+          "cannot find the fixed ips associated with port " + ports.get(0));
     }
 
+    boolean success = true;
+    String floatingIpAddress = "";
+    // assuming that the poolName is equal to the network name. TODO find a better approach
+    floatingIpAddress =
+        findFloatingIpAddress(
+                os,
+                vnfdConnectionPoint.getFloatingIp(),
+                tenantId,
+                vnfdConnectionPoint.getVirtual_link_reference())
+            .getFloatingIpAddress();
+    log.debug("floatingIpAddress: " + floatingIpAddress);
+    success =
+        success
+            && os.compute()
+                .floatingIps()
+                .addFloatingIP(
+                    server4j,
+                    ports.get(0).getFixedIps().iterator().next().getIpAddress(),
+                    floatingIpAddress)
+                .isSuccess();
+    log.debug("success = " + success);
+
     if (success) {
+      log.debug("Associated fip " + floatingIpAddress + " with server " + server4j);
       return floatingIpAddress;
     }
     throw new VimDriverException(
@@ -1228,6 +1307,14 @@ public class OpenStack4JDriver extends VimDriver {
                         }
                       }));
     }
+    // Delete all the ports associated with the server
+    PortListOptions options = PortListOptions.create().deviceId(id);
+    List<? extends Port> ports = os.networking().port().list(options);
+    log.debug("List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
+    for (Port port : ports) {
+      os.networking().port().delete(port.getId());
+    }
+
     log.info(
         "Deleting VM with id "
             + id
