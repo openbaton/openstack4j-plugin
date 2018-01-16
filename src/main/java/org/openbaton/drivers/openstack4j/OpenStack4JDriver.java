@@ -74,6 +74,7 @@ import org.openstack4j.model.common.Payloads;
 import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
+import org.openstack4j.model.compute.SecGroupExtension;
 import org.openstack4j.model.compute.ServerCreate;
 import org.openstack4j.model.compute.builder.ServerCreateBuilder;
 import org.openstack4j.model.compute.ext.AvailabilityZone;
@@ -88,6 +89,7 @@ import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Port;
 import org.openstack4j.model.network.Router;
 import org.openstack4j.model.network.RouterInterface;
+import org.openstack4j.model.network.builder.PortBuilder;
 import org.openstack4j.model.network.options.PortListOptions;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
@@ -230,9 +232,9 @@ public class OpenStack4JDriver extends VimDriver {
       String userData)
       throws VimDriverException {
     Server server;
+    List<VNFDConnectionPoint> vnfdcps = new ArrayList<>(vnfdConnectionPoints);
     try {
 
-      List<VNFDConnectionPoint> vnfdcps = new ArrayList<>(vnfdConnectionPoints);
       vnfdcps.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
 
       String imageId = getImageIdFromName(openstackVimInstance, image);
@@ -301,7 +303,7 @@ public class OpenStack4JDriver extends VimDriver {
                     getTenantId(openstackVimInstance, os)));
         }
         // create a port
-        Port port = null;
+        PortBuilder portBuilder = null;
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
 
@@ -337,27 +339,24 @@ public class OpenStack4JDriver extends VimDriver {
                     vnfdConnectionPoint.getFixedIp(), extNetId));
           }
 
-          port =
-              os.networking()
-                  .port()
-                  .create(
-                      Builders.port()
-                          .name(buildPortName(vnfdConnectionPoint))
-                          .networkId(extNetId)
-                          .fixedIp(vnfdConnectionPoint.getFixedIp(), subnet.getId())
-                          .build());
+          portBuilder =
+              Builders.port()
+                  .name(buildPortName(vnfdConnectionPoint))
+                  .networkId(extNetId)
+                  .fixedIp(vnfdConnectionPoint.getFixedIp(), subnet.getId());
 
         } else {
-          port =
-              os.networking()
-                  .port()
-                  .create(
-                      Builders.port()
-                          .name(buildPortName(vnfdConnectionPoint))
-                          .networkId(extNetId)
-                          .build());
+          portBuilder =
+              Builders.port().name(buildPortName(vnfdConnectionPoint)).networkId(extNetId);
         }
 
+        List<? extends SecGroupExtension> osSecGroups = os.compute().securityGroups().list();
+        for (SecGroupExtension sg : osSecGroups) {
+          if (secGroup.contains(sg.getName())) {
+            portBuilder = portBuilder.securityGroup(sg.getId());
+          }
+        }
+        Port port = os.networking().port().create(portBuilder.build());
         if (null == port) {
           throw new VimDriverException("Unable to create port on network with id " + extNetId);
         }
@@ -426,6 +425,18 @@ public class OpenStack4JDriver extends VimDriver {
       server = Utils.getServer(server4j);
     } catch (Exception e) {
       log.error(e.getMessage(), e);
+
+      // if any ports have been created delete them
+      for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
+        PortListOptions options = PortListOptions.create().name(buildPortName(vnfdConnectionPoint));
+        List<? extends Port> ports = os.networking().port().list(options);
+        log.debug(
+            "List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
+        for (Port port : ports) {
+          os.networking().port().delete(port.getId());
+        }
+      }
+
       throw new VimDriverException(e.getMessage());
     }
     return server;
