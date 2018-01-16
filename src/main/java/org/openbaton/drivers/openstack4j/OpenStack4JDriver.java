@@ -288,7 +288,7 @@ public class OpenStack4JDriver extends VimDriver {
         Optional<? extends org.openstack4j.model.network.Network> networkByName = null;
         if (extNetId == null) {
           networkByName =
-              getNetworkByName(
+              getNetworkByNameAndTenantId(
                   os,
                   vnfdConnectionPoint.getVirtual_link_reference(),
                   getTenantId(openstackVimInstance, os));
@@ -296,8 +296,9 @@ public class OpenStack4JDriver extends VimDriver {
           else
             throw new VimDriverException(
                 String.format(
-                    "Network with name %s was not found",
-                    vnfdConnectionPoint.getVirtual_link_reference()));
+                    "Not found network with name %s in tenant with id %s",
+                    vnfdConnectionPoint.getVirtual_link_reference(),
+                    getTenantId(openstackVimInstance, os)));
         }
         // create a port
         Port port = null;
@@ -460,7 +461,7 @@ public class OpenStack4JDriver extends VimDriver {
         : getTenantIdFromName(os, vimInstance.getTenant());
   }
 
-  private Optional<? extends org.openstack4j.model.network.Network> getNetworkByName(
+  private Optional<? extends org.openstack4j.model.network.Network> getNetworkByNameAndTenantId(
       OSClient os, String name, String tenantId) {
     return os.networking()
         .network()
