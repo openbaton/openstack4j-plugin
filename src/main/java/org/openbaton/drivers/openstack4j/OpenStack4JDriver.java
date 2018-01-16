@@ -295,7 +295,7 @@ public class OpenStack4JDriver extends VimDriver {
           else
             throw new VimDriverException(
                 String.format(
-                    "Network with name %s and tenant id %s was not found",
+                    "Not found network with name %s in tenant with id %s",
                     vnfdConnectionPoint.getVirtual_link_reference(),
                     getTenantId(openstackVimInstance, os)));
         }
