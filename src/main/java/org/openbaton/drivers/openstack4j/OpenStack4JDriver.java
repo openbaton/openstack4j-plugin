@@ -275,14 +275,14 @@ public class OpenStack4JDriver extends VimDriver {
       sc = serverCreateBuilder.build();
 
       for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
-        String extNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
-        if (extNetId == null) {
+        String openstackNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
+        if (openstackNetId == null) {
           Optional<? extends org.openstack4j.model.network.Network> networkByName =
               getNetworkByName(
                   os,
                   vnfdConnectionPoint.getVirtual_link_reference(),
                   getTenantId(openstackVimInstance, os));
-          if (networkByName.isPresent()) extNetId = networkByName.get().getId();
+          if (networkByName.isPresent()) openstackNetId = networkByName.get().getId();
           else
             throw new VimDriverException(
                 String.format(
@@ -291,9 +291,9 @@ public class OpenStack4JDriver extends VimDriver {
         }
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
-          sc.addNetwork(extNetId, vnfdConnectionPoint.getFixedIp());
+          sc.addNetwork(openstackNetId, vnfdConnectionPoint.getFixedIp());
         } else {
-          sc.addNetwork(extNetId, null);
+          sc.addNetwork(openstackNetId, null);
         }
       }
       // createing ServerCreate object
@@ -1374,7 +1374,67 @@ public class OpenStack4JDriver extends VimDriver {
   public boolean deleteNetwork(BaseVimInstance vimInstance, String extId)
       throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
-    return os.networking().network().delete(extId).isSuccess();
+
+    new Thread(
+            () -> {
+              OSClient osClient;
+              try {
+                osClient = this.authenticate((OpenstackVimInstance) vimInstance);
+              } catch (VimDriverException e) {
+                e.printStackTrace();
+                return;
+              }
+              int attempts = 0;
+              boolean success = false;
+              log.debug(String.format("Trying deleting Network %s", extId));
+              while (attempts < 10 && !success) {
+                org.openstack4j.model.network.Network network =
+                    os.networking().network().get(extId);
+                network
+                    .getSubnets()
+                    .forEach(
+                        subnetId -> {
+                          for (Router r : os.networking().router().list()) {
+                            os.networking()
+                                .port()
+                                .list()
+                                .stream()
+                                .filter(
+                                    p ->
+                                        p.getDeviceOwner().equals("network:router_interface")
+                                            && p.getDeviceId().equals(r.getId())
+                                            && p.getFixedIps()
+                                                .stream()
+                                                .anyMatch(ip -> ip.getSubnetId().equals(subnetId)))
+                                .forEach(
+                                    p -> {
+                                      log.debug(
+                                          String.format(
+                                              "Detaching subnet %s from router %s identified by port %s",
+                                              subnetId, r.getId(), p.getId()));
+                                      os.networking()
+                                          .router()
+                                          .detachInterface(r.getId(), subnetId, p.getId());
+                                    });
+                          }
+                        });
+
+                try {
+                  Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                  e.printStackTrace();
+                }
+                success = osClient.networking().network().delete(extId).isSuccess();
+                attempts++;
+              }
+              if (!success) {
+                log.error(String.format("Not able to delete network with id %s", extId));
+              } else {
+                log.info(String.format("Removed network %s", extId));
+              }
+            })
+        .start();
+    return true;
   }
 
   @Override
