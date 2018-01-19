@@ -74,6 +74,7 @@ import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.ServerCreate;
+import org.openstack4j.model.compute.actions.RebuildOptions;
 import org.openstack4j.model.compute.builder.ServerCreateBuilder;
 import org.openstack4j.model.compute.ext.AvailabilityZone;
 import org.openstack4j.model.identity.v2.Tenant;
@@ -480,6 +481,23 @@ public class OpenStack4JDriver extends VimDriver {
 
     return router.getExternalGatewayInfo().getNetworkId();
   }
+
+  public Server rebuildServer(BaseVimInstance vimInstance, String serverId, String imageName) throws VimDriverException {
+    OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+    OSClient os = this.authenticate(openstackVimInstance);
+    RebuildOptions rebuildOptions = RebuildOptions.create();
+    if(imageName!=null) {
+      rebuildOptions.image(imageName);
+      log.info("Rebuilding server: "+ serverId +" with image: "+imageName);
+    }else log.info("Rebuilding server: "+ serverId);
+    ActionResponse response = os.compute().servers().rebuild(serverId,rebuildOptions);
+
+    if (!response.isSuccess()) {
+      throw new VimDriverException("Error uploading image: " + response.getFault());
+    }
+    return Utils.getServer(os.compute().servers().get(serverId));
+  }
+
 
   private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId, String networkName) {
     List<NetFloatingIP> res = new ArrayList<>();
