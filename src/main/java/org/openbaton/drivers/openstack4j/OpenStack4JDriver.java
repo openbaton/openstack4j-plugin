@@ -482,22 +482,22 @@ public class OpenStack4JDriver extends VimDriver {
     return router.getExternalGatewayInfo().getNetworkId();
   }
 
-  public Server rebuildServer(BaseVimInstance vimInstance, String serverId, String imageName) throws VimDriverException {
+  public Server rebuildServer(BaseVimInstance vimInstance, String serverId, String imageId)
+      throws VimDriverException {
     OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
     OSClient os = this.authenticate(openstackVimInstance);
     RebuildOptions rebuildOptions = RebuildOptions.create();
-    if(imageName!=null) {
-      rebuildOptions.image(imageName);
-      log.info("Rebuilding server: "+ serverId +" with image: "+imageName);
-    }else log.info("Rebuilding server: "+ serverId);
-    ActionResponse response = os.compute().servers().rebuild(serverId,rebuildOptions);
-
+    if (imageId != null) {
+      rebuildOptions.image(imageId);
+      log.info("Rebuilding server: " + serverId + " with image: " + imageId);
+    } else log.info("Rebuilding server: " + serverId);
+    ActionResponse response = os.compute().servers().rebuild(serverId, rebuildOptions);
     if (!response.isSuccess()) {
-      throw new VimDriverException("Error uploading image: " + response.getFault());
+      log.error("Error rebuilding image: " + response.getFault());
+      throw new VimDriverException("Error rebuilding image: " + response.getFault());
     }
     return Utils.getServer(os.compute().servers().get(serverId));
   }
-
 
   private List<NetFloatingIP> listFloatingIps(OSClient os, String tenantId, String networkName) {
     List<NetFloatingIP> res = new ArrayList<>();
