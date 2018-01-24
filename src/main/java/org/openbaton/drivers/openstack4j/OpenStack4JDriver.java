@@ -26,23 +26,14 @@ import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Properties;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -532,16 +523,87 @@ public class OpenStack4JDriver extends VimDriver {
       OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
       Map<String, String> map = new HashMap<>();
       map.put("limit", "100");
-      List<? extends Image> images = os.images().list(map);
+      List<? extends org.openstack4j.model.image.v2.Image> v2Images = new ArrayList<>();
+      List<? extends Image> v1Images = new ArrayList<>();
       List<BaseNfvImage> nfvImages = new ArrayList<>();
-      for (Image image : images) {
-        nfvImages.add(Utils.getImage(image));
+
+      Exception exceptionListingV2 = null;
+      try {
+        log.debug(
+            "Listing images for VIM "
+                + vimInstance.getName()
+                + " ("
+                + vimInstance.getId()
+                + ") using Glance v2.");
+        v2Images = os.imagesV2().list(map);
+        log.trace(
+            "Listed images for VIM "
+                + vimInstance.getName()
+                + " ("
+                + vimInstance.getId()
+                + "): "
+                + v2Images);
+      } catch (Exception e) {
+        log.warn(
+            "Listing images of VIM "
+                + vimInstance.getName()
+                + " ("
+                + vimInstance.getId()
+                + ") using Glance v2 threw exception: "
+                + e.getMessage());
+        exceptionListingV2 = e;
       }
+      if (v2Images.isEmpty()) {
+        log.debug("No images found using Glance v2. Falling back to v1.");
+        try {
+          v1Images = os.images().list(map);
+          log.trace(
+              "Listed images for VIM "
+                  + vimInstance.getName()
+                  + " ("
+                  + vimInstance.getId()
+                  + "): "
+                  + v2Images);
+        } catch (Exception e) {
+          log.warn(
+              "Listing images of VIM "
+                  + vimInstance.getName()
+                  + " ("
+                  + vimInstance.getId()
+                  + ") using Glance v1 threw exception: "
+                  + e.getMessage());
+          if (exceptionListingV2 != null)
+            throw new VimDriverException(
+                "Listing images of VIM "
+                    + vimInstance.getName()
+                    + " ("
+                    + vimInstance.getId()
+                    + ") threw exceptions using Glance v2: \""
+                    + exceptionListingV2.getMessage()
+                    + "\" and using Glance v1: \""
+                    + e.getMessage()
+                    + "\"");
+        }
+        for (Image image : v1Images) nfvImages.add(Utils.getImage(image));
+      } else {
+        for (org.openstack4j.model.image.v2.Image image : v2Images)
+          nfvImages.add(Utils.getImageV2(image));
+      }
+
       log.info(
-          "Listed images for BaseVimInstance with name: "
+          "Listed "
+              + nfvImages.size()
+              + " images for BaseVimInstance "
               + vimInstance.getName()
-              + " -> Images: "
-              + images);
+              + " ("
+              + vimInstance.getId()
+              + ") : "
+              + String.join(
+                  ", ",
+                  nfvImages
+                      .stream()
+                      .map(i -> ((NFVImage) i).getName() + " (" + i.getExtId() + ")")
+                      .collect(Collectors.toList())));
 
       return nfvImages;
     } catch (Exception e) {
