@@ -440,7 +440,8 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Not found image '" + imageName + "' on " + vimInstance.getName());
   }
 
-  private String getExternalNetworkId(OSClient os, String internalNetworkName) throws Exception {
+  private String getExternalNetworkId(OSClient os, String tenantId, String internalNetworkName)
+      throws Exception {
     String internalNetworkId = "";
     List<? extends org.openstack4j.model.network.Network> networks =
         os.networking().network().list();
@@ -451,8 +452,7 @@ public class OpenStack4JDriver extends VimDriver {
             + " is connected to");
 
     for (org.openstack4j.model.network.Network network : networks) {
-      //log.debug(" network "  + network);
-      if (network.getName().equals(internalNetworkName)) {
+      if (network.getName().equals(internalNetworkName) && network.getTenantId().equals(tenantId)) {
         internalNetworkId = network.getId();
         break;
       }
@@ -1132,7 +1132,8 @@ public class OpenStack4JDriver extends VimDriver {
                 .orElseThrow(() -> new VimDriverException("Network not found"))
                 .getExtId());
       } else {
-        extNetworkId = getExternalNetworkId(os, vnfdConnectionPoint.getVirtual_link_reference());
+        extNetworkId =
+            getExternalNetworkId(os, tenantId, vnfdConnectionPoint.getVirtual_link_reference());
         log.debug(
             "Retrieved external network: "
                 + new GsonBuilder()
