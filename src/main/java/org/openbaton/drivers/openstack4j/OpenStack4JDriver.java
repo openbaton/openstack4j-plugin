@@ -428,9 +428,6 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Flavor with name " + flavor + " was not found");
   }
 
-
-
-
   private String getImageIdFromName(BaseVimInstance vimInstance, String imageName)
       throws VimDriverException {
     log.debug("Retrieving id of the image named " + imageName + " on PoP " + vimInstance.getName());
@@ -782,7 +779,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   public Server rebuildServer(BaseVimInstance vimInstance, String serverId, String imageId)
-          throws VimDriverException {
+      throws VimDriverException {
     OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
     OSClient os = this.authenticate(openstackVimInstance);
     RebuildOptions rebuildOptions = RebuildOptions.create();
