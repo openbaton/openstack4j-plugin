@@ -457,6 +457,7 @@ public class OpenStack4JDriver extends VimDriver {
               || network.isShared()
               || network.isRouterExternal())) {
         internalNetworkId = network.getId();
+        log.debug(String.format("Found network [%s] : %s", network.getId(), network.getName()));
         break;
       }
     }
@@ -1062,7 +1063,7 @@ public class OpenStack4JDriver extends VimDriver {
     for (Map.Entry<Object, Object> entry : natRules.entrySet()) {
       String fromCidr = (String) entry.getKey();
       String toCidr = (String) entry.getValue();
-      log.debug("Source CIDR is: " + fromCidr);
+      log.trace("Source CIDR is: " + fromCidr);
       SubnetUtils utilsFrom = new SubnetUtils(fromCidr);
       SubnetUtils utilsTo = new SubnetUtils(toCidr);
 
