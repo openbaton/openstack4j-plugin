@@ -452,7 +452,10 @@ public class OpenStack4JDriver extends VimDriver {
             + " is connected to");
 
     for (org.openstack4j.model.network.Network network : networks) {
-      if (network.getName().equals(internalNetworkName) && network.getTenantId().equals(tenantId)) {
+      if (network.getName().equals(internalNetworkName)
+          && (network.getTenantId().equals(tenantId)
+              || network.isShared()
+              || network.isRouterExternal())) {
         internalNetworkId = network.getId();
         break;
       }
