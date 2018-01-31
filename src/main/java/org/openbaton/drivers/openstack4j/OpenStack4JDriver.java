@@ -1547,40 +1547,47 @@ public class OpenStack4JDriver extends VimDriver {
               while (attempts < 10 && !success) {
                 org.openstack4j.model.network.Network network =
                     os.networking().network().get(extId);
-                network
-                    .getSubnets()
-                    .forEach(
-                        subnetId -> {
-                          for (Router r : os.networking().router().list()) {
-                            os.networking()
-                                .port()
-                                .list()
-                                .stream()
-                                .filter(
-                                    p ->
-                                        p.getDeviceOwner().equals("network:router_interface")
-                                            && p.getDeviceId().equals(r.getId())
-                                            && p.getFixedIps()
-                                                .stream()
-                                                .anyMatch(ip -> ip.getSubnetId().equals(subnetId)))
-                                .forEach(
-                                    p -> {
-                                      log.debug(
-                                          String.format(
-                                              "Detaching subnet %s from router %s identified by port %s",
-                                              subnetId, r.getId(), p.getId()));
-                                      os.networking()
-                                          .router()
-                                          .detachInterface(r.getId(), subnetId, p.getId());
-                                    });
-                          }
-                        });
-
                 try {
                   Thread.sleep(1000);
                 } catch (InterruptedException e) {
                   e.printStackTrace();
                 }
+                try {
+                  network
+                      .getSubnets()
+                      .forEach(
+                          subnetId -> {
+                            for (Router r : os.networking().router().list()) {
+                              os.networking()
+                                  .port()
+                                  .list()
+                                  .stream()
+                                  .filter(
+                                      p ->
+                                          p.getDeviceOwner().equals("network:router_interface")
+                                              && p.getDeviceId().equals(r.getId())
+                                              && p.getFixedIps()
+                                                  .stream()
+                                                  .anyMatch(
+                                                      ip -> ip.getSubnetId().equals(subnetId)))
+                                  .forEach(
+                                      p -> {
+                                        log.debug(
+                                            String.format(
+                                                "Detaching subnet %s from router %s identified by port %s",
+                                                subnetId, r.getId(), p.getId()));
+                                        os.networking()
+                                            .router()
+                                            .detachInterface(r.getId(), subnetId, p.getId());
+                                      });
+                            }
+                          });
+                } catch (Throwable e) {
+                  attempts++;
+                  success = false;
+                  continue;
+                }
+
                 success = osClient.networking().network().delete(extId).isSuccess();
                 attempts++;
               }
