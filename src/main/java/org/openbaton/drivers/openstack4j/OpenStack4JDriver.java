@@ -79,6 +79,7 @@ import org.openstack4j.model.network.NetQuota;
 import org.openstack4j.model.network.Port;
 import org.openstack4j.model.network.Router;
 import org.openstack4j.model.network.RouterInterface;
+import org.openstack4j.model.network.builder.SubnetBuilder;
 import org.openstack4j.model.network.options.PortListOptions;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
@@ -1479,19 +1480,30 @@ public class OpenStack4JDriver extends VimDriver {
   public Subnet createSubnet(BaseVimInstance vimInstance, BaseNetwork createdNetwork, Subnet subnet)
       throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
+    SubnetBuilder subnetBuilder =
+        Builders.subnet()
+            .name(subnet.getName())
+            .networkId(createdNetwork.getExtId())
+            .ipVersion(IPVersionType.V4)
+            .cidr(subnet.getCidr())
+            .enableDHCP(true)
+            .gateway(subnet.getGatewayIp());
+
+    if (subnet.getDns() != null && !subnet.getDns().isEmpty())
+      subnet
+          .getDns()
+          .forEach(
+              dns -> {
+                log.info(String.format("Adding DNS: %s", dns));
+                subnetBuilder.addDNSNameServer(dns);
+              });
+    else {
+      String dns = properties.getProperty("openstack4j.dns.ip", "8.8.8.8");
+      log.info(String.format("Adding DNS: %s", dns));
+      subnetBuilder.addDNSNameServer(dns);
+    }
     org.openstack4j.model.network.Subnet subnet4j =
-        os.networking()
-            .subnet()
-            .create(
-                Builders.subnet()
-                    .name(subnet.getName())
-                    .networkId(createdNetwork.getExtId())
-                    .ipVersion(IPVersionType.V4)
-                    .cidr(subnet.getCidr())
-                    .addDNSNameServer(properties.getProperty("openstack4j.dns.ip", "8.8.8.8"))
-                    .enableDHCP(true)
-                    .gateway(subnet.getGatewayIp())
-                    .build());
+        os.networking().subnet().create(subnetBuilder.build());
 
     Subnet sn = Utils.getSubnet(subnet4j);
     try {
@@ -1556,40 +1568,42 @@ public class OpenStack4JDriver extends VimDriver {
                 } catch (InterruptedException e) {
                   e.printStackTrace();
                 }
-                try {
-                  network
-                      .getSubnets()
-                      .forEach(
-                          subnetId -> {
-                            for (Router r : os.networking().router().list()) {
-                              os.networking()
-                                  .port()
-                                  .list()
-                                  .stream()
-                                  .filter(
-                                      p ->
-                                          p.getDeviceOwner().equals("network:router_interface")
-                                              && p.getDeviceId().equals(r.getId())
-                                              && p.getFixedIps()
-                                                  .stream()
-                                                  .anyMatch(
-                                                      ip -> ip.getSubnetId().equals(subnetId)))
-                                  .forEach(
-                                      p -> {
-                                        log.debug(
-                                            String.format(
-                                                "Detaching subnet %s from router %s identified by port %s",
-                                                subnetId, r.getId(), p.getId()));
-                                        os.networking()
-                                            .router()
-                                            .detachInterface(r.getId(), subnetId, p.getId());
-                                      });
-                            }
-                          });
-                } catch (Throwable e) {
-                  attempts++;
-                  success = false;
-                  continue;
+                if (!network.getSubnets().isEmpty()) {
+                  try {
+                    network
+                        .getSubnets()
+                        .forEach(
+                            subnetId -> {
+                              for (Router r : os.networking().router().list()) {
+                                os.networking()
+                                    .port()
+                                    .list()
+                                    .stream()
+                                    .filter(
+                                        p ->
+                                            p.getDeviceOwner().equals("network:router_interface")
+                                                && p.getDeviceId().equals(r.getId())
+                                                && p.getFixedIps()
+                                                    .stream()
+                                                    .anyMatch(
+                                                        ip -> ip.getSubnetId().equals(subnetId)))
+                                    .forEach(
+                                        p -> {
+                                          log.debug(
+                                              String.format(
+                                                  "Detaching subnet %s from router %s identified by port %s",
+                                                  subnetId, r.getId(), p.getId()));
+                                          os.networking()
+                                              .router()
+                                              .detachInterface(r.getId(), subnetId, p.getId());
+                                        });
+                              }
+                            });
+                  } catch (Throwable e) {
+                    attempts++;
+                    success = false;
+                    continue;
+                  }
                 }
 
                 success = osClient.networking().network().delete(extId).isSuccess();
@@ -1598,7 +1612,7 @@ public class OpenStack4JDriver extends VimDriver {
               if (!success) {
                 log.error(String.format("Not able to delete network with id %s", extId));
               } else {
-                log.info(String.format("Removed network %s", extId));
+                log.info(String.format("Deleted network %s", extId));
               }
             })
         .start();
