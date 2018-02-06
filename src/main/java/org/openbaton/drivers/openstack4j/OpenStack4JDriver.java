@@ -441,7 +441,8 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Not found image '" + imageName + "' on " + vimInstance.getName());
   }
 
-  private String getExternalNetworkId(OSClient os, String tenantId, String internalNetworkName)
+  private String getExternalNetworkId(
+      OSClient os, String tenantId, String internalNetworkName, BaseVimInstance vimInstance)
       throws Exception {
     String internalNetworkId = "";
     List<? extends org.openstack4j.model.network.Network> networks =
@@ -481,8 +482,13 @@ public class OpenStack4JDriver extends VimDriver {
     }
 
     if (null == routerPort) {
-      throw new Exception(
-          "Cannot find a connection to a router, therefore cannot assign floating ip");
+      log.debug(
+          "Router port does not belong to project "
+              + tenantId
+              + ". Falling back to old mechanism for retrieving the external network ID.");
+      return getExternalNet(vimInstance).getExtId();
+      //      throw new Exception(
+      //          "Cannot find a connection to a router, therefore cannot assign floating ip");
     }
 
     // major ASSUMPTION:  There will only be ONE router connected to a given internal network
@@ -1138,7 +1144,11 @@ public class OpenStack4JDriver extends VimDriver {
                 .getExtId());
       } else {
         extNetworkId =
-            getExternalNetworkId(os, tenantId, vnfdConnectionPoint.getVirtual_link_reference());
+            getExternalNetworkId(
+                os,
+                tenantId,
+                vnfdConnectionPoint.getVirtual_link_reference(),
+                openstackVimInstance);
         log.debug(
             "Retrieved external network: "
                 + new GsonBuilder()
@@ -1640,3 +1650,4 @@ public class OpenStack4JDriver extends VimDriver {
     return "openstack";
   }
 }
+
