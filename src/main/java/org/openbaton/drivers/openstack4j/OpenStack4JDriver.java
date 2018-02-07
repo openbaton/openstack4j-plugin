@@ -66,6 +66,7 @@ import org.openstack4j.model.compute.Address;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.ServerCreate;
+import org.openstack4j.model.compute.actions.RebuildOptions;
 import org.openstack4j.model.compute.builder.ServerCreateBuilder;
 import org.openstack4j.model.compute.ext.AvailabilityZone;
 import org.openstack4j.model.identity.v2.Tenant;
@@ -786,6 +787,23 @@ public class OpenStack4JDriver extends VimDriver {
       log.error(e.getMessage(), e);
       throw new VimDriverException(e.getMessage());
     }
+  }
+
+  public Server rebuildServer(BaseVimInstance vimInstance, String serverId, String imageId)
+      throws VimDriverException {
+    OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+    OSClient os = this.authenticate(openstackVimInstance);
+    RebuildOptions rebuildOptions = RebuildOptions.create();
+    if (imageId != null) {
+      rebuildOptions.image(imageId);
+      log.info("Rebuilding server: " + serverId + " with image: " + imageId);
+    } else log.info("Rebuilding server: " + serverId);
+    ActionResponse response = os.compute().servers().rebuild(serverId, rebuildOptions);
+    if (!response.isSuccess()) {
+      log.error("Error rebuilding image: " + response.getFault());
+      throw new VimDriverException("Error rebuilding image: " + response.getFault());
+    }
+    return Utils.getServer(os.compute().servers().get(serverId));
   }
 
   @Override
@@ -1650,4 +1668,3 @@ public class OpenStack4JDriver extends VimDriver {
     return "openstack";
   }
 }
-
