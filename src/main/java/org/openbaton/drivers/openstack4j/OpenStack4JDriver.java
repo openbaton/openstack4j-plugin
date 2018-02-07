@@ -1668,4 +1668,3 @@ public class OpenStack4JDriver extends VimDriver {
     return "openstack";
   }
 }
-
