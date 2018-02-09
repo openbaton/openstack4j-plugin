@@ -5,6 +5,8 @@ before_install:
  - chmod +x gradlew
 notifications:
   slack: openbaton:0mU0eqEY8Dcm0sWeFiGrKvFe
+    on_success: change
+    on_failure: always
   email:
     - notifications@openbaton.org
 cache:
