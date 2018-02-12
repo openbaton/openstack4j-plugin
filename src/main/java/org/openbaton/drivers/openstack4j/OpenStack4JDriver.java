@@ -309,7 +309,8 @@ public class OpenStack4JDriver extends VimDriver {
           if (networkByName.isPresent()) {
             subnets = networkByName.get().getSubnets();
           } else {
-            org.openstack4j.model.network.Network network = os.networking().network().get(openstackNetId);
+            org.openstack4j.model.network.Network network =
+                os.networking().network().get(openstackNetId);
             subnets = network.getSubnets();
           }
 
@@ -355,7 +356,8 @@ public class OpenStack4JDriver extends VimDriver {
         }
         Port port = os.networking().port().create(portBuilder.build());
         if (null == port) {
-          throw new VimDriverException("Unable to create port on network with id " + openstackNetId);
+          throw new VimDriverException(
+              "Unable to create port on network with id " + openstackNetId);
         }
         log.debug("created port with id " + port.getId());
 
@@ -1323,7 +1325,11 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private NetFloatingIP findFloatingIpAddress(
-      OSClient os, String fipValue, String tenantId, String internalNetworkName, OpenstackVimInstance vimInstance)
+      OSClient os,
+      String fipValue,
+      String tenantId,
+      String internalNetworkName,
+      OpenstackVimInstance vimInstance)
       throws VimDriverException {
     if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals("")) {
       return listFloatingIps(os, tenantId, internalNetworkName, vimInstance).get(0);
@@ -1412,7 +1418,7 @@ public class OpenStack4JDriver extends VimDriver {
                                             ip.getAddr(),
                                             getTenantId(openstackVimInstance, os),
                                             "",
-                                        openstackVimInstance)
+                                            openstackVimInstance)
                                         .getId());
                           } catch (VimDriverException e) {
                             e.printStackTrace();
