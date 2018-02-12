@@ -44,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -76,6 +77,7 @@ import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.SecGroupExtension;
 import org.openstack4j.model.compute.ServerCreate;
+import org.openstack4j.model.compute.actions.RebuildOptions;
 import org.openstack4j.model.compute.builder.ServerCreateBuilder;
 import org.openstack4j.model.compute.ext.AvailabilityZone;
 import org.openstack4j.model.identity.v2.Tenant;
@@ -90,6 +92,7 @@ import org.openstack4j.model.network.Port;
 import org.openstack4j.model.network.Router;
 import org.openstack4j.model.network.RouterInterface;
 import org.openstack4j.model.network.builder.PortBuilder;
+import org.openstack4j.model.network.builder.SubnetBuilder;
 import org.openstack4j.model.network.options.PortListOptions;
 import org.openstack4j.openstack.OSFactory;
 import org.slf4j.Logger;
@@ -127,13 +130,6 @@ public class OpenStack4JDriver extends VimDriver {
                 ? Identifier.byName("Default")
                 : Identifier.byName(vimInstance.getDomain());
         Identifier project = Identifier.byId(vimInstance.getTenant());
-
-        //        String[] domainProjectSplit = vimInstance.getTenant().split(Pattern.quote(":"));
-        //        if (domainProjectSplit.length == 2) {
-        //          log.trace("Found domain name and project id: " + Arrays.toString(domainProjectSplit));
-        //          domain = Identifier.byName(domainProjectSplit[0]);
-        //          project = Identifier.byId(domainProjectSplit[1]);
-        //        }
 
         log.trace(
             "Authenticate method with domain id: "
@@ -286,15 +282,15 @@ public class OpenStack4JDriver extends VimDriver {
       sc = serverCreateBuilder.build();
 
       for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
-        String extNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
-        Optional<? extends org.openstack4j.model.network.Network> networkByName = null;
-        if (extNetId == null) {
+        String openstackNetId = vnfdConnectionPoint.getVirtual_link_reference_id();
+        Optional<? extends org.openstack4j.model.network.Network> networkByName = Optional.empty();
+        if (openstackNetId == null) {
           networkByName =
               getNetworkByNameAndTenantId(
                   os,
                   vnfdConnectionPoint.getVirtual_link_reference(),
                   getTenantId(openstackVimInstance, os));
-          if (networkByName.isPresent()) extNetId = networkByName.get().getId();
+          if (networkByName.isPresent()) openstackNetId = networkByName.get().getId();
           else
             throw new VimDriverException(
                 String.format(
@@ -306,19 +302,20 @@ public class OpenStack4JDriver extends VimDriver {
         PortBuilder portBuilder = null;
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
+          sc.addNetwork(openstackNetId, vnfdConnectionPoint.getFixedIp());
 
           // get the subnet associated with the network
-          List<String> subnets = null;
+          List<String> subnets;
           if (networkByName.isPresent()) {
             subnets = networkByName.get().getSubnets();
           } else {
-            org.openstack4j.model.network.Network network = os.networking().network().get(extNetId);
+            org.openstack4j.model.network.Network network = os.networking().network().get(openstackNetId);
             subnets = network.getSubnets();
           }
 
           if (null == subnets) {
             throw new VimDriverException(
-                String.format("Cannot find subnets of network with id %s", extNetId));
+                String.format("Cannot find subnets of network with id %s", openstackNetId));
           }
 
           org.openstack4j.model.network.Subnet subnet = null;
@@ -336,18 +333,18 @@ public class OpenStack4JDriver extends VimDriver {
                 String.format(
                     "The fixed ip %s is not in the range of any of the subnets"
                         + " associated with the network with id %s",
-                    vnfdConnectionPoint.getFixedIp(), extNetId));
+                    vnfdConnectionPoint.getFixedIp(), openstackNetId));
           }
 
           portBuilder =
               Builders.port()
                   .name(buildPortName(vnfdConnectionPoint))
-                  .networkId(extNetId)
+                  .networkId(openstackNetId)
                   .fixedIp(vnfdConnectionPoint.getFixedIp(), subnet.getId());
 
         } else {
           portBuilder =
-              Builders.port().name(buildPortName(vnfdConnectionPoint)).networkId(extNetId);
+              Builders.port().name(buildPortName(vnfdConnectionPoint)).networkId(openstackNetId);
         }
 
         List<? extends SecGroupExtension> osSecGroups = os.compute().securityGroups().list();
@@ -358,7 +355,7 @@ public class OpenStack4JDriver extends VimDriver {
         }
         Port port = os.networking().port().create(portBuilder.build());
         if (null == port) {
-          throw new VimDriverException("Unable to create port on network with id " + extNetId);
+          throw new VimDriverException("Unable to create port on network with id " + openstackNetId);
         }
         log.debug("created port with id " + port.getId());
 
@@ -523,7 +520,9 @@ public class OpenStack4JDriver extends VimDriver {
     throw new VimDriverException("Not found image '" + imageName + "' on " + vimInstance.getName());
   }
 
-  private String getExternalNetworkId(OSClient os, String internalNetworkName) throws Exception {
+  private String getExternalNetworkId(
+      OSClient os, String tenantId, String internalNetworkName, BaseVimInstance vimInstance)
+      throws Exception {
     String internalNetworkId = "";
     List<? extends org.openstack4j.model.network.Network> networks =
         os.networking().network().list();
@@ -534,9 +533,12 @@ public class OpenStack4JDriver extends VimDriver {
             + " is connected to");
 
     for (org.openstack4j.model.network.Network network : networks) {
-      //log.debug(" network "  + network);
-      if (network.getName().equals(internalNetworkName)) {
+      if (network.getName().equals(internalNetworkName)
+          && (network.getTenantId().equals(tenantId)
+              || network.isShared()
+              || network.isRouterExternal())) {
         internalNetworkId = network.getId();
+        log.debug(String.format("Found network [%s] : %s", network.getId(), network.getName()));
         break;
       }
     }
@@ -559,8 +561,13 @@ public class OpenStack4JDriver extends VimDriver {
     }
 
     if (null == routerPort) {
-      throw new Exception(
-          "Cannot find a connection to a router, therefore cannot assign floating ip");
+      log.debug(
+          "Router port does not belong to project "
+              + tenantId
+              + ". Falling back to old mechanism for retrieving the external network ID.");
+      return getExternalNet(vimInstance).getExtId();
+      //      throw new Exception(
+      //          "Cannot find a connection to a router, therefore cannot assign floating ip");
     }
 
     // major ASSUMPTION:  There will only be ONE router connected to a given internal network
@@ -574,12 +581,12 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private List<NetFloatingIP> listFloatingIps(
-      OSClient os, String tenantId, String internalNetworkName) {
+      OSClient os, String tenantId, String internalNetworkName, OpenstackVimInstance vimInstance) {
     List<NetFloatingIP> res = new ArrayList<>();
     String externalNetworkId = "";
     if (!internalNetworkName.equals("")) {
       try {
-        externalNetworkId = getExternalNetworkId(os, internalNetworkName);
+        externalNetworkId = getExternalNetworkId(os, tenantId, internalNetworkName, vimInstance);
         log.debug("External network (name: " + internalNetworkName + ") id: " + externalNetworkId);
       } catch (Exception e) {
         log.error(e.getMessage(), e);
@@ -659,17 +666,87 @@ public class OpenStack4JDriver extends VimDriver {
       OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
       Map<String, String> map = new HashMap<>();
       map.put("limit", "100");
-      List<? extends Image> images = os.images().list(map);
+      List<? extends org.openstack4j.model.image.v2.Image> v2Images = new ArrayList<>();
+      List<? extends Image> v1Images = new ArrayList<>();
       List<BaseNfvImage> nfvImages = new ArrayList<>();
-      for (Image image : images) {
-        nfvImages.add(Utils.getImage(image));
+
+      Exception exceptionListingV2 = null;
+      try {
+        log.debug(
+            "Listing images for VIM "
+                + vimInstance.getName()
+                + " ("
+                + vimInstance.getId()
+                + ") using Glance v2.");
+        v2Images = os.imagesV2().list(map);
+        log.trace(
+            "Listed images for VIM "
+                + vimInstance.getName()
+                + " ("
+                + vimInstance.getId()
+                + "): "
+                + v2Images);
+      } catch (Exception e) {
+        log.warn(
+            "Listing images of VIM "
+                + vimInstance.getName()
+                + " ("
+                + vimInstance.getId()
+                + ") using Glance v2 threw exception: "
+                + e.getMessage());
+        exceptionListingV2 = e;
       }
+      if (v2Images.isEmpty()) {
+        log.debug("No images found using Glance v2. Falling back to v1.");
+        try {
+          v1Images = os.images().list(map);
+          log.trace(
+              "Listed images for VIM "
+                  + vimInstance.getName()
+                  + " ("
+                  + vimInstance.getId()
+                  + "): "
+                  + v2Images);
+        } catch (Exception e) {
+          log.warn(
+              "Listing images of VIM "
+                  + vimInstance.getName()
+                  + " ("
+                  + vimInstance.getId()
+                  + ") using Glance v1 threw exception: "
+                  + e.getMessage());
+          if (exceptionListingV2 != null)
+            throw new VimDriverException(
+                "Listing images of VIM "
+                    + vimInstance.getName()
+                    + " ("
+                    + vimInstance.getId()
+                    + ") threw exceptions using Glance v2: \""
+                    + exceptionListingV2.getMessage()
+                    + "\" and using Glance v1: \""
+                    + e.getMessage()
+                    + "\"");
+        }
+        for (Image image : v1Images) nfvImages.add(Utils.getImage(image));
+      } else {
+        for (org.openstack4j.model.image.v2.Image image : v2Images)
+          nfvImages.add(Utils.getImageV2(image));
+      }
+
       log.info(
-          "Listed images for PoP with name "
+          "Listed "
+              + nfvImages.size()
+              + " images for BaseVimInstance "
               + vimInstance.getName()
-              + " and authURL "
-              + vimInstance.getAuthUrl());
-      log.debug(new GsonBuilder().setPrettyPrinting().create().toJson(images));
+              + " ("
+              + vimInstance.getId()
+              + ") : "
+              + String.join(
+                  ", ",
+                  nfvImages
+                      .stream()
+                      .map(i -> ((NFVImage) i).getName() + " (" + i.getExtId() + ")")
+                      .collect(Collectors.toList())));
 
       return nfvImages;
     } catch (Exception e) {
@@ -790,6 +867,23 @@ public class OpenStack4JDriver extends VimDriver {
       log.error(e.getMessage(), e);
       throw new VimDriverException(e.getMessage());
     }
+  }
+
+  public Server rebuildServer(BaseVimInstance vimInstance, String serverId, String imageId)
+      throws VimDriverException {
+    OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+    OSClient os = this.authenticate(openstackVimInstance);
+    RebuildOptions rebuildOptions = RebuildOptions.create();
+    if (imageId != null) {
+      rebuildOptions.image(imageId);
+      log.info("Rebuilding server: " + serverId + " with image: " + imageId);
+    } else log.info("Rebuilding server: " + serverId);
+    ActionResponse response = os.compute().servers().rebuild(serverId, rebuildOptions);
+    if (!response.isSuccess()) {
+      log.error("Error rebuilding image: " + response.getFault());
+      throw new VimDriverException("Error rebuilding image: " + response.getFault());
+    }
+    return Utils.getServer(os.compute().servers().get(serverId));
   }
 
   @Override
@@ -1074,7 +1168,7 @@ public class OpenStack4JDriver extends VimDriver {
     for (Map.Entry<Object, Object> entry : natRules.entrySet()) {
       String fromCidr = (String) entry.getKey();
       String toCidr = (String) entry.getValue();
-      log.debug("Source CIDR is: " + fromCidr);
+      log.trace("Source CIDR is: " + fromCidr);
       SubnetUtils utilsFrom = new SubnetUtils(fromCidr);
       SubnetUtils utilsTo = new SubnetUtils(toCidr);
 
@@ -1147,7 +1241,12 @@ public class OpenStack4JDriver extends VimDriver {
                 .orElseThrow(() -> new VimDriverException("Network not found"))
                 .getExtId());
       } else {
-        extNetworkId = getExternalNetworkId(os, vnfdConnectionPoint.getVirtual_link_reference());
+        extNetworkId =
+            getExternalNetworkId(
+                os,
+                tenantId,
+                vnfdConnectionPoint.getVirtual_link_reference(),
+                openstackVimInstance);
         log.debug(
             "Retrieved external network: "
                 + new GsonBuilder()
@@ -1197,7 +1296,8 @@ public class OpenStack4JDriver extends VimDriver {
                 os,
                 vnfdConnectionPoint.getFloatingIp(),
                 tenantId,
-                vnfdConnectionPoint.getVirtual_link_reference())
+                vnfdConnectionPoint.getVirtual_link_reference(),
+                openstackVimInstance)
             .getFloatingIpAddress();
     log.debug("floatingIpAddress: " + floatingIpAddress);
     success =
@@ -1223,10 +1323,10 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private NetFloatingIP findFloatingIpAddress(
-      OSClient os, String fipValue, String tenantId, String internalNetworkName)
+      OSClient os, String fipValue, String tenantId, String internalNetworkName, OpenstackVimInstance vimInstance)
       throws VimDriverException {
     if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals("")) {
-      return listFloatingIps(os, tenantId, internalNetworkName).get(0);
+      return listFloatingIps(os, tenantId, internalNetworkName, vimInstance).get(0);
     }
     return os.networking()
         .floatingip()
@@ -1311,7 +1411,8 @@ public class OpenStack4JDriver extends VimDriver {
                                             os,
                                             ip.getAddr(),
                                             getTenantId(openstackVimInstance, os),
-                                            "")
+                                            "",
+                                        openstackVimInstance)
                                         .getId());
                           } catch (VimDriverException e) {
                             e.printStackTrace();
@@ -1511,19 +1612,30 @@ public class OpenStack4JDriver extends VimDriver {
   public Subnet createSubnet(BaseVimInstance vimInstance, BaseNetwork createdNetwork, Subnet subnet)
       throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
+    SubnetBuilder subnetBuilder =
+        Builders.subnet()
+            .name(subnet.getName())
+            .networkId(createdNetwork.getExtId())
+            .ipVersion(IPVersionType.V4)
+            .cidr(subnet.getCidr())
+            .enableDHCP(true)
+            .gateway(subnet.getGatewayIp());
+
+    if (subnet.getDns() != null && !subnet.getDns().isEmpty())
+      subnet
+          .getDns()
+          .forEach(
+              dns -> {
+                log.info(String.format("Adding DNS: %s", dns));
+                subnetBuilder.addDNSNameServer(dns);
+              });
+    else {
+      String dns = properties.getProperty("openstack4j.dns.ip", "8.8.8.8");
+      log.info(String.format("Adding DNS: %s", dns));
+      subnetBuilder.addDNSNameServer(dns);
+    }
     org.openstack4j.model.network.Subnet subnet4j =
-        os.networking()
-            .subnet()
-            .create(
-                Builders.subnet()
-                    .name(subnet.getName())
-                    .networkId(createdNetwork.getExtId())
-                    .ipVersion(IPVersionType.V4)
-                    .cidr(subnet.getCidr())
-                    .addDNSNameServer(properties.getProperty("openstack4j.dns.ip", "8.8.8.8"))
-                    .enableDHCP(true)
-                    .gateway(subnet.getGatewayIp())
-                    .build());
+        os.networking().subnet().create(subnetBuilder.build());
 
     Subnet sn = Utils.getSubnet(subnet4j);
     try {
@@ -1567,7 +1679,76 @@ public class OpenStack4JDriver extends VimDriver {
   public boolean deleteNetwork(BaseVimInstance vimInstance, String extId)
       throws VimDriverException {
     OSClient os = this.authenticate((OpenstackVimInstance) vimInstance);
-    return os.networking().network().delete(extId).isSuccess();
+
+    new Thread(
+            () -> {
+              OSClient osClient;
+              try {
+                osClient = this.authenticate((OpenstackVimInstance) vimInstance);
+              } catch (VimDriverException e) {
+                e.printStackTrace();
+                return;
+              }
+              int attempts = 0;
+              boolean success = false;
+              log.debug(String.format("Trying deleting Network %s", extId));
+              while (attempts < 10 && !success) {
+                org.openstack4j.model.network.Network network =
+                    os.networking().network().get(extId);
+                try {
+                  Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                  e.printStackTrace();
+                }
+                if (!network.getSubnets().isEmpty()) {
+                  try {
+                    network
+                        .getSubnets()
+                        .forEach(
+                            subnetId -> {
+                              for (Router r : os.networking().router().list()) {
+                                os.networking()
+                                    .port()
+                                    .list()
+                                    .stream()
+                                    .filter(
+                                        p ->
+                                            p.getDeviceOwner().equals("network:router_interface")
+                                                && p.getDeviceId().equals(r.getId())
+                                                && p.getFixedIps()
+                                                    .stream()
+                                                    .anyMatch(
+                                                        ip -> ip.getSubnetId().equals(subnetId)))
+                                    .forEach(
+                                        p -> {
+                                          log.debug(
+                                              String.format(
+                                                  "Detaching subnet %s from router %s identified by port %s",
+                                                  subnetId, r.getId(), p.getId()));
+                                          os.networking()
+                                              .router()
+                                              .detachInterface(r.getId(), subnetId, p.getId());
+                                        });
+                              }
+                            });
+                  } catch (Throwable e) {
+                    attempts++;
+                    success = false;
+                    continue;
+                  }
+                }
+
+                success = osClient.networking().network().delete(extId).isSuccess();
+                attempts++;
+              }
+              if (!success) {
+                log.error(String.format("Not able to delete network with id %s", extId));
+              } else {
+                log.info(String.format("Deleted network %s", extId));
+              }
+            })
+        .start();
+    return true;
   }
 
   @Override
