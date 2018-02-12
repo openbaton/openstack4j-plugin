@@ -22,7 +22,6 @@ import org.openstack4j.model.network.Subnet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Created by lto on 10/01/2017. */
 class Utils {
   private static Logger log = LoggerFactory.getLogger(Utils.class);
 
