@@ -115,6 +115,13 @@ public class OpenStack4JDriver extends VimDriver {
     OpenStack4JDriver.lock = new ReentrantLock();
   }
 
+  // using this to make the router names different, doesn't really guarantee uniqueness but is better than nothing
+  private static int routerNum;
+
+  private static synchronized int getNextRouterNum() {
+    return routerNum++;
+  }
+
   public OSClient authenticate(OpenstackVimInstance vimInstance) throws VimDriverException {
 
     OSClient os;
@@ -481,6 +488,16 @@ public class OpenStack4JDriver extends VimDriver {
         .findFirst();
   }
 
+  private Optional<? extends org.openstack4j.model.network.Network> getExternalNetworkByName(
+      OSClient os, String name) {
+    return os.networking()
+        .network()
+        .list()
+        .stream()
+        .filter(n -> n.getName().equals(name) && n.isRouterExternal())
+        .findFirst();
+  }
+
   private Optional<? extends AvailabilityZone> getZone(OSClient os, BaseVimInstance vimInstance) {
     String az = vimInstance.getMetadata().get("az");
     if (az == null) return Optional.empty();
@@ -567,7 +584,7 @@ public class OpenStack4JDriver extends VimDriver {
           "Router port does not belong to project "
               + tenantId
               + ". Falling back to old mechanism for retrieving the external network ID.");
-      return getExternalNet(vimInstance).getExtId();
+      return getExternalNet(vimInstance, "").getExtId();
       //      throw new Exception(
       //          "Cannot find a connection to a router, therefore cannot assign floating ip");
     }
@@ -1459,59 +1476,93 @@ public class OpenStack4JDriver extends VimDriver {
     return Utils.getNetwork(network4j);
   }
 
-  private void attachToRouter(OSClient os, String subnetExtId, BaseVimInstance vimInstance)
+  private void attachToRouter(OSClient os, Subnet subnet, BaseVimInstance vimInstance)
       throws VimDriverException {
+
     OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
+    String tenantId = getTenantIdFromName(os, openstackVimInstance.getTenant());
+    String externalNetworkId = "";
+
+    log.debug(
+        "Attempting to attach to router, external network name is '"
+            + subnet.getExternalNetworkName()
+            + "'");
+
+    if (null != subnet.getExternalNetworkName() && !subnet.getExternalNetworkName().equals("")) {
+      Optional<? extends org.openstack4j.model.network.Network> externalNetwork = Optional.empty();
+      externalNetwork = getExternalNetworkByName(os, subnet.getExternalNetworkName());
+      if (externalNetwork.isPresent()) {
+        externalNetworkId = externalNetwork.get().getId();
+        log.debug("External network for router is: " + externalNetwork);
+      } else {
+        throw new VimDriverException(
+            "External network '"
+                + subnet.getExternalNetworkName()
+                + "' cannot be found, cannot create subnet and connect to it.");
+      }
+    }
+
     List<? extends Router> tmpRouters = os.networking().router().list();
     List<Router> routers = new ArrayList<>();
     for (Router router : tmpRouters) {
       if ((isV3API(vimInstance) && router.getTenantId().equals(openstackVimInstance.getTenant())
-          || (!isV3API(vimInstance)
-              && router
-                  .getTenantId()
-                  .equals(getTenantIdFromName(os, openstackVimInstance.getTenant()))))) {
-        routers.add(router);
+          || (!isV3API(vimInstance) && router.getTenantId().equals(tenantId)))) {
+        if (null == subnet.getExternalNetworkName()
+            || subnet.getExternalNetworkName().isEmpty()
+            || router.getExternalGatewayInfo().getNetworkId().equals(externalNetworkId)) {
+          routers.add(router);
+        }
       }
     }
+
     RouterInterface iface;
     if (!routers.isEmpty()) {
       Router router = routers.get(0);
       iface =
           os.networking()
               .router()
-              .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnetExtId);
+              .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnet.getExtId());
     } else {
-      Router router = createRouter(os, vimInstance);
+      Router router = createRouter(os, vimInstance, externalNetworkId);
       iface =
           os.networking()
               .router()
-              .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnetExtId);
+              .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnet.getExtId());
     }
     if (iface == null) {
       throw new VimDriverException("Not Able to attach to router the new subnet");
     }
   }
 
-  private Router createRouter(OSClient os, BaseVimInstance vimInstance) throws VimDriverException {
+  private Router createRouter(OSClient os, BaseVimInstance vimInstance, String externalNetworkId)
+      throws VimDriverException {
     log.info("Create Router on " + vimInstance.getName());
+    // incrementing the router number is better than nothing but should really come up with a better way to guarantee uniqueness
     return os.networking()
         .router()
         .create(
             Builders.router()
-                .name("openbaton-router")
+                .name("openbaton-router" + getNextRouterNum())
                 .adminStateUp(true)
-                .externalGateway(getExternalNet(vimInstance).getExtId())
+                .externalGateway(getExternalNet(vimInstance, externalNetworkId).getExtId())
                 .build());
   }
 
-  private Network getExternalNet(BaseVimInstance vimInstance) throws VimDriverException {
+  private Network getExternalNet(BaseVimInstance vimInstance, String externalNetworkId)
+      throws VimDriverException {
     for (BaseNetwork net : listNetworks(vimInstance)) {
-
-      if (((Network) net).getExternal()) {
+      if (((Network) net).getExternal()
+          && (null == externalNetworkId
+              || externalNetworkId.equals("")
+              || externalNetworkId.equals(net.getExtId()))) {
         return ((Network) net);
       }
     }
-    throw new VimDriverException("No External Network found! please add one");
+    if (null == externalNetworkId || externalNetworkId.equals("")) {
+      throw new VimDriverException("No External Network found! please add one");
+    } else {
+      throw new VimDriverException("No External Network found matching id " + externalNetworkId);
+    }
   }
 
   @Override
@@ -1644,8 +1695,9 @@ public class OpenStack4JDriver extends VimDriver {
         os.networking().subnet().create(subnetBuilder.build());
 
     Subnet sn = Utils.getSubnet(subnet4j);
+    sn.setExternalNetworkName(subnet.getExternalNetworkName());
     try {
-      attachToRouter(os, sn.getExtId(), vimInstance);
+      attachToRouter(os, sn, vimInstance);
     } catch (VimDriverException e) {
       log.error(e.getMessage());
     }
