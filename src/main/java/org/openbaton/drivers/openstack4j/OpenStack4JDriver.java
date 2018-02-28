@@ -1482,10 +1482,17 @@ public class OpenStack4JDriver extends VimDriver {
               .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnetExtId);
     } else {
       Router router = createRouter(os, vimInstance);
+      if (null == router) {
+        throw new VimDriverException("Unable to create router");
+      }
       iface =
           os.networking()
               .router()
               .attachInterface(router.getId(), AttachInterfaceType.SUBNET, subnetExtId);
+      if (null == iface) {
+        // failed to attach router, delete the router
+        os.networking().router().delete(router.getId());
+      }
     }
     if (iface == null) {
       throw new VimDriverException("Not Able to attach to router the new subnet");
@@ -1648,6 +1655,14 @@ public class OpenStack4JDriver extends VimDriver {
       attachToRouter(os, sn.getExtId(), vimInstance);
     } catch (VimDriverException e) {
       log.error(e.getMessage());
+
+      // if we could not attach the router to the delete the subnet
+      try {
+        deleteSubnet(vimInstance, sn.getExtId());
+      } catch (VimDriverException e2) {
+        log.error(e.getMessage());
+      }
+      throw new VimDriverException("Deleted subnet");
     }
     return sn;
   }
