@@ -84,13 +84,7 @@ import org.openstack4j.model.identity.v2.Tenant;
 import org.openstack4j.model.identity.v3.Project;
 import org.openstack4j.model.identity.v3.Region;
 import org.openstack4j.model.image.Image;
-import org.openstack4j.model.network.AttachInterfaceType;
-import org.openstack4j.model.network.IPVersionType;
-import org.openstack4j.model.network.NetFloatingIP;
-import org.openstack4j.model.network.NetQuota;
-import org.openstack4j.model.network.Port;
-import org.openstack4j.model.network.Router;
-import org.openstack4j.model.network.RouterInterface;
+import org.openstack4j.model.network.*;
 import org.openstack4j.model.network.builder.PortBuilder;
 import org.openstack4j.model.network.builder.SubnetBuilder;
 import org.openstack4j.model.network.options.PortListOptions;
@@ -103,6 +97,7 @@ public class OpenStack4JDriver extends VimDriver {
   private Logger log = LoggerFactory.getLogger(OpenStack4JDriver.class);
   private static Lock lock;
   private String waitForVM;
+  private static String portNamePrefix = "VNFD-";
 
   public OpenStack4JDriver() {
     super();
@@ -438,6 +433,9 @@ public class OpenStack4JDriver extends VimDriver {
 
       throw new VimDriverException(e.getMessage());
     }
+    // delete any orphaned ports
+    deleteOrphanedPorts(openstackVimInstance, os, vnfdcps);
+
     return server;
   }
 
@@ -455,7 +453,7 @@ public class OpenStack4JDriver extends VimDriver {
   }
 
   private String buildPortName(VNFDConnectionPoint vnfdConnectionPoint) {
-    return "VNFD-" + vnfdConnectionPoint.getId();
+    return portNamePrefix + vnfdConnectionPoint.getId();
   }
 
   private boolean allowsAllSourceAddresses(VNFDConnectionPoint cp) {
@@ -1394,6 +1392,10 @@ public class OpenStack4JDriver extends VimDriver {
       throws VimDriverException {
     OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
     OSClient os = this.authenticate(openstackVimInstance);
+
+    // just in case there are any orphaned ports, delete them as well
+    deleteOrphanedPorts(openstackVimInstance, os, null);
+
     /* I suppose that checking for the result waits also for the effectivness of the operation */
     if (Boolean.parseBoolean(properties.getProperty("deallocate-floating-ip", "true"))) {
       log.info("Deallocating floating IP for VM with external id " + id);
@@ -1512,6 +1514,40 @@ public class OpenStack4JDriver extends VimDriver {
       }
     }
     throw new VimDriverException("No External Network found! please add one");
+  }
+
+  // If user deletes instances using Openstack the ports are not deleted, delete any "orphaned" ports
+  private void deleteOrphanedPorts(
+      OpenstackVimInstance openstackVimInstance,
+      OSClient os,
+      List<VNFDConnectionPoint> vnfdConnectionPointList) {
+    log.debug("Deleting orphaned ports");
+    try {
+      PortListOptions options =
+          PortListOptions.create().tenantId(getTenantId(openstackVimInstance, os));
+      List<? extends Port> ports = os.networking().port().list(options);
+      log.trace(
+          "List of ports for orphan testing is "
+              + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
+      for (Port port : ports) {
+        if (port.getState() == State.DOWN && port.getName().startsWith(portNamePrefix)) {
+          boolean deletePort = true;
+          if (null != vnfdConnectionPointList) {
+            for (VNFDConnectionPoint point : vnfdConnectionPointList) {
+              if (port.getName().equals(buildPortName(point))) {
+                deletePort = false;
+              }
+            }
+          }
+          if (deletePort) {
+            log.debug("deleting orphaned port " + port);
+            os.networking().port().delete(port.getId());
+          }
+        }
+      }
+    } catch (Exception e) {
+      log.error(e.getMessage(), e);
+    }
   }
 
   @Override
