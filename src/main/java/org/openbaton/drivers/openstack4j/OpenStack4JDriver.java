@@ -69,7 +69,6 @@ import org.openbaton.plugin.PluginStarter;
 import org.openbaton.vim.drivers.interfaces.VimDriver;
 import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient;
-import org.openstack4j.api.exceptions.AuthenticationException;
 import org.openstack4j.core.transport.Config;
 import org.openstack4j.model.common.ActionResponse;
 import org.openstack4j.model.common.Identifier;
@@ -239,8 +238,12 @@ public class OpenStack4JDriver extends VimDriver {
           }
         }
       }
-    } catch (AuthenticationException e) {
-      throw new VimDriverException(e.getMessage(), e);
+    } catch (Exception e) {
+      throw new VimDriverException(
+          "Exception while authenticating to OpenStack: '"
+              + e.getMessage()
+              + "'. Please check VIM credentials and potentially used certificates.",
+          e);
     }
 
     return os;
