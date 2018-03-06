@@ -78,13 +78,17 @@ repositories {
     }
 }
 dependencies {
+
+
+
     compile 'org.openbaton:plugin-sdk:' + obVersion
 
-    compile group: 'org.pacesys', name: 'openstack4j', version: '3.1.0'
+    compile group: 'org.pacesys', name: 'openstack4j-core', version: '3.1.0'
+    compile group: 'org.pacesys.openstack4j.connectors', name: 'openstack4j-resteasy', version: '3.1.0'
 
 
     compile group: 'commons-net', name: 'commons-net', version: '3.5'
-    compile group: 'org.apache.commons', name: 'commons-lang3', version: '3.4'
+    compile group: 'commons-io', name: 'commons-io', version: '2.6'
 
     compile 'org.slf4j:slf4j-api:1.7.25'
     compile 'org.slf4j:slf4j-simple:1.7.25'
