@@ -49,7 +49,6 @@ import java.util.stream.Collectors;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
@@ -144,8 +143,7 @@ public class OpenStack4JDriver extends VimDriver {
         CertificateFactory cf = CertificateFactory.getInstance("X.509");
         log.debug("Try to generate certificate from InputStream.");
         X509Certificate cert = (X509Certificate) cf.generateCertificate(certificateInputStream);
-        TrustManagerFactory tmf =
-            TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance("X509");
         KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
         keyStore.load(null);
         String alias = cert.getSubjectX500Principal().getName();
@@ -167,7 +165,10 @@ public class OpenStack4JDriver extends VimDriver {
                 + " to the Java Key Store.",
             e);
       } finally {
-        IOUtils.closeQuietly(certificateInputStream);
+        try {
+          certificateInputStream.close();
+        } catch (IOException e) {
+        }
       }
     }
 
@@ -1054,7 +1055,8 @@ public class OpenStack4JDriver extends VimDriver {
     }
     Optional<Exception> exception = Arrays.stream(e).filter(Objects::nonNull).findAny();
     if (exception.isPresent()) {
-      throw new VimDriverException("Error refreshing vim", exception.get());
+      throw new VimDriverException(
+          "Error refreshing vim: " + exception.get().getMessage(), exception.get());
     }
     return openstackVimInstance;
   }
