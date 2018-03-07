@@ -339,7 +339,9 @@ public class OpenStack4JDriver extends VimDriver {
 
         } else {
           portBuilder =
-              Builders.port().name(Utils.buildPortName(vnfdConnectionPoint)).networkId(openstackNetId);
+              Builders.port()
+                  .name(Utils.buildPortName(vnfdConnectionPoint))
+                  .networkId(openstackNetId);
         }
 
         List<? extends SecGroupExtension> osSecGroups = os.compute().securityGroups().list();
@@ -415,14 +417,16 @@ public class OpenStack4JDriver extends VimDriver {
         server4j = os.compute().servers().boot(sc);
       }
 
-      Map<String, String> portNamesAndInterfaceIds = Utils.getPortNamesAndInterfaceIds(vnfdConnectionPoints);
+      Map<String, String> portNamesAndInterfaceIds =
+          Utils.getPortNamesAndInterfaceIds(vnfdConnectionPoints);
       server = Utils.getServer(server4j, os, portNamesAndInterfaceIds);
     } catch (Exception e) {
       log.error(e.getMessage(), e);
 
       // if any ports have been created delete them
       for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
-        PortListOptions options = PortListOptions.create().name(Utils.buildPortName(vnfdConnectionPoint));
+        PortListOptions options =
+            PortListOptions.create().name(Utils.buildPortName(vnfdConnectionPoint));
         List<? extends Port> ports = os.networking().port().list(options);
         log.debug(
             "List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
@@ -1271,7 +1275,8 @@ public class OpenStack4JDriver extends VimDriver {
       os.compute().floatingIps().allocateIP(poolName);
     }
 
-    PortListOptions options = PortListOptions.create().name(Utils.buildPortName(vnfdConnectionPoint));
+    PortListOptions options =
+        PortListOptions.create().name(Utils.buildPortName(vnfdConnectionPoint));
     List<? extends Port> ports = os.networking().port().list(options);
     log.debug("List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
 

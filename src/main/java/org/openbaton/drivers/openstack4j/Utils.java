@@ -35,7 +35,9 @@ class Utils {
     return portNamePrefix + vnfdConnectionPoint.getId();
   }
 
-  static String getPortNamePrefix() { return portNamePrefix; }
+  static String getPortNamePrefix() {
+    return portNamePrefix;
+  }
 
   static DeploymentFlavour getFlavor(Flavor flavor4j) {
     DeploymentFlavour deploymentFlavour = new DeploymentFlavour();
@@ -47,7 +49,8 @@ class Utils {
     return deploymentFlavour;
   }
 
-  static org.openbaton.catalogue.nfvo.Server getServer(Server server4j, OSClient os, Map<String, String> portNamesAndInterfaceIds) {
+  static org.openbaton.catalogue.nfvo.Server getServer(
+      Server server4j, OSClient os, Map<String, String> portNamesAndInterfaceIds) {
     log.trace("Server: " + new GsonBuilder().setPrettyPrinting().create().toJson(server4j));
     org.openbaton.catalogue.nfvo.Server server = new org.openbaton.catalogue.nfvo.Server();
     server.setName(server4j.getName());
@@ -86,7 +89,7 @@ class Utils {
         os.networking().subnet().get(ip4j.getSubnetId()).getName();
         subnetIp.setSubnetName(os.networking().subnet().get(ip4j.getSubnetId()).getName());
 
-        if(portNamesAndInterfaceIds.containsKey(port.getName())) {
+        if (portNamesAndInterfaceIds.containsKey(port.getName())) {
           subnetIp.setInterfaceId(portNamesAndInterfaceIds.get(port.getName()));
         }
 
@@ -108,7 +111,8 @@ class Utils {
   static Map<String, String> getPortNamesAndInterfaceIds(Set<VNFDConnectionPoint> vnfdcps) {
     Map<String, String> interfaces = new HashMap<String, String>();
     for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
-      interfaces.put(buildPortName(vnfdConnectionPoint), vnfdConnectionPoint.getInterfaceId().toString());
+      interfaces.put(
+          buildPortName(vnfdConnectionPoint), vnfdConnectionPoint.getInterfaceId().toString());
     }
     return interfaces;
   }
