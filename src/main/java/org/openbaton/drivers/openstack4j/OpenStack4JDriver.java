@@ -126,13 +126,13 @@ public class OpenStack4JDriver extends VimDriver {
             Integer.parseInt(properties.getProperty("connection-timeout", "10000")));
 
     // Add the certificate given in the VIM to the keystore used by the OSClient
-    if (vimInstance.getTrustedCertificate() != null
-        && !vimInstance.getTrustedCertificate().equals("")) {
+    if (vimInstance.getOpenstackSslCertificate() != null
+        && !vimInstance.getOpenstackSslCertificate().equals("")) {
       log.debug("Certificate is provided in VIM " + vimInstance.getName());
       InputStream certificateInputStream = null;
       try {
         certificateInputStream =
-            new ByteArrayInputStream(vimInstance.getTrustedCertificate().getBytes());
+            new ByteArrayInputStream(vimInstance.getOpenstackSslCertificate().getBytes());
       } catch (Exception e) {
         log.error("Not able to generate InputStream from provided certificate field.");
         throw new VimDriverException(
@@ -152,14 +152,14 @@ public class OpenStack4JDriver extends VimDriver {
         SSLContext sslContext = SSLContext.getInstance("TLS");
         sslContext.init(null, tmf.getTrustManagers(), null);
         cfg.withSSLContext(sslContext);
-        log.debug("Added SSLContext with the trusted certificate to the OSClient configuration.");
+        log.debug("Added SSLContext with the OpenStack certificate to the OSClient configuration.");
       } catch (Exception e) {
         log.error(
-            "Exception while adding the certificate in the OpenStack VIM "
+            "Exception while adding the OpenStack SSL certificate in the OpenStack VIM "
                 + vimInstance.getName()
                 + "to the Java Key Store.");
         throw new VimDriverException(
-            "Exception while adding the certificate in the OpenStack VIM "
+            "Exception while adding the OpenStack SSL certificate in the OpenStack VIM "
                 + vimInstance.getName()
                 + " to the Java Key Store.",
             e);
