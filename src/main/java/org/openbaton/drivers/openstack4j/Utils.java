@@ -1,29 +1,41 @@
 package org.openbaton.drivers.openstack4j;
 
 import com.google.gson.GsonBuilder;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.openbaton.catalogue.mano.common.DeploymentFlavour;
+import org.openbaton.catalogue.mano.common.SubnetIp;
+import org.openbaton.catalogue.mano.descriptor.VNFDConnectionPoint;
 import org.openbaton.catalogue.nfvo.Quota;
 import org.openbaton.catalogue.nfvo.images.BaseNfvImage;
 import org.openbaton.catalogue.nfvo.images.NFVImage;
 import org.openbaton.catalogue.nfvo.networks.Network;
-import org.openstack4j.model.compute.Address;
+import org.openstack4j.api.OSClient;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.QuotaSet;
 import org.openstack4j.model.compute.Server;
 import org.openstack4j.model.compute.ext.AvailabilityZone;
 import org.openstack4j.model.image.Image;
+import org.openstack4j.model.network.IP;
 import org.openstack4j.model.network.NetQuota;
+import org.openstack4j.model.network.Port;
 import org.openstack4j.model.network.Subnet;
+import org.openstack4j.model.network.options.PortListOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class Utils {
   private static Logger log = LoggerFactory.getLogger(Utils.class);
+  private static String portNamePrefix = "VNFD-";
+
+  static String buildPortName(VNFDConnectionPoint vnfdConnectionPoint) {
+    return portNamePrefix + vnfdConnectionPoint.getId();
+  }
+
+  static String getPortNamePrefix() { return portNamePrefix; }
 
   static DeploymentFlavour getFlavor(Flavor flavor4j) {
     DeploymentFlavour deploymentFlavour = new DeploymentFlavour();
@@ -35,7 +47,7 @@ class Utils {
     return deploymentFlavour;
   }
 
-  static org.openbaton.catalogue.nfvo.Server getServer(Server server4j) {
+  static org.openbaton.catalogue.nfvo.Server getServer(Server server4j, OSClient os, Map<String, String> portNamesAndInterfaceIds) {
     log.trace("Server: " + new GsonBuilder().setPrettyPrinting().create().toJson(server4j));
     org.openbaton.catalogue.nfvo.Server server = new org.openbaton.catalogue.nfvo.Server();
     server.setName(server4j.getName());
@@ -55,17 +67,33 @@ class Utils {
     }
     server.setHostName(server4j.getName()); // TODO which one is correct?
     server.setInstanceName(server4j.getInstanceName());
-    HashMap<String, List<String>> ips = new HashMap<>();
-    if (server4j.getAddresses() != null && server4j.getAddresses().getAddresses() != null) {
-      for (Map.Entry<String, List<? extends Address>> address :
-          server4j.getAddresses().getAddresses().entrySet()) {
-        List<String> adrs = new ArrayList<>();
-        for (Address ip : address.getValue()) {
-          adrs.add(ip.getAddr());
+
+    Map<String, Set<SubnetIp>> ips = new HashMap<String, Set<SubnetIp>>();
+    // get a list of all of the ports associated with the server
+    PortListOptions options = PortListOptions.create().deviceId(server4j.getId());
+    List<? extends Port> ports = os.networking().port().list(options);
+
+    for (Port port : ports) {
+      org.openstack4j.model.network.Network network =
+          os.networking().network().get(port.getNetworkId());
+      if (!ips.containsKey(network.getName())) {
+        ips.put(network.getName(), new HashSet<SubnetIp>());
+      }
+
+      for (IP ip4j : port.getFixedIps()) {
+        SubnetIp subnetIp = new SubnetIp();
+        subnetIp.setIp(ip4j.getIpAddress());
+        os.networking().subnet().get(ip4j.getSubnetId()).getName();
+        subnetIp.setSubnetName(os.networking().subnet().get(ip4j.getSubnetId()).getName());
+
+        if(portNamesAndInterfaceIds.containsKey(port.getName())) {
+          subnetIp.setInterfaceId(portNamesAndInterfaceIds.get(port.getName()));
         }
-        ips.put(address.getKey(), adrs);
+
+        ips.get(network.getName()).add(subnetIp);
       }
     }
+
     server.setIps(ips);
     if (server4j.getFlavor() != null) server.setFlavor(Utils.getFlavor(server4j.getFlavor()));
     if (server4j.getImage() != null) server.setImage(Utils.getImage(server4j.getImage()));
@@ -75,6 +103,14 @@ class Utils {
     //TODO list floating ips
     //server.setFloatingIps();
     return server;
+  }
+
+  static Map<String, String> getPortNamesAndInterfaceIds(Set<VNFDConnectionPoint> vnfdcps) {
+    Map<String, String> interfaces = new HashMap<String, String>();
+    for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
+      interfaces.put(buildPortName(vnfdConnectionPoint), vnfdConnectionPoint.getInterfaceId().toString());
+    }
+    return interfaces;
   }
 
   private static NFVImage getImage(org.openstack4j.model.compute.Image image4j) {

@@ -84,13 +84,7 @@ import org.openstack4j.model.identity.v2.Tenant;
 import org.openstack4j.model.identity.v3.Project;
 import org.openstack4j.model.identity.v3.Region;
 import org.openstack4j.model.image.Image;
-import org.openstack4j.model.network.AttachInterfaceType;
-import org.openstack4j.model.network.IPVersionType;
-import org.openstack4j.model.network.NetFloatingIP;
-import org.openstack4j.model.network.NetQuota;
-import org.openstack4j.model.network.Port;
-import org.openstack4j.model.network.Router;
-import org.openstack4j.model.network.RouterInterface;
+import org.openstack4j.model.network.*;
 import org.openstack4j.model.network.builder.PortBuilder;
 import org.openstack4j.model.network.builder.SubnetBuilder;
 import org.openstack4j.model.network.options.PortListOptions;
@@ -339,13 +333,13 @@ public class OpenStack4JDriver extends VimDriver {
 
           portBuilder =
               Builders.port()
-                  .name(buildPortName(vnfdConnectionPoint))
+                  .name(Utils.buildPortName(vnfdConnectionPoint))
                   .networkId(openstackNetId)
                   .fixedIp(vnfdConnectionPoint.getFixedIp(), subnet.getId());
 
         } else {
           portBuilder =
-              Builders.port().name(buildPortName(vnfdConnectionPoint)).networkId(openstackNetId);
+              Builders.port().name(Utils.buildPortName(vnfdConnectionPoint)).networkId(openstackNetId);
         }
 
         List<? extends SecGroupExtension> osSecGroups = os.compute().securityGroups().list();
@@ -421,13 +415,14 @@ public class OpenStack4JDriver extends VimDriver {
         server4j = os.compute().servers().boot(sc);
       }
 
-      server = Utils.getServer(server4j);
+      Map<String, String> portNamesAndInterfaceIds = Utils.getPortNamesAndInterfaceIds(vnfdConnectionPoints);
+      server = Utils.getServer(server4j, os, portNamesAndInterfaceIds);
     } catch (Exception e) {
       log.error(e.getMessage(), e);
 
       // if any ports have been created delete them
       for (VNFDConnectionPoint vnfdConnectionPoint : vnfdcps) {
-        PortListOptions options = PortListOptions.create().name(buildPortName(vnfdConnectionPoint));
+        PortListOptions options = PortListOptions.create().name(Utils.buildPortName(vnfdConnectionPoint));
         List<? extends Port> ports = os.networking().port().list(options);
         log.debug(
             "List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
@@ -452,10 +447,6 @@ public class OpenStack4JDriver extends VimDriver {
       Set<String> secGroup,
       String userData) {
     return null;
-  }
-
-  private String buildPortName(VNFDConnectionPoint vnfdConnectionPoint) {
-    return "VNFD-" + vnfdConnectionPoint.getId();
   }
 
   private boolean allowsAllSourceAddresses(VNFDConnectionPoint cp) {
@@ -770,7 +761,7 @@ public class OpenStack4JDriver extends VimDriver {
             || (!isV3API(vimInstance)
                 && srv.getTenantId()
                     .equals(getTenantIdFromName(os, openstackVimInstance.getTenant()))))) {
-          obServers.add(Utils.getServer(srv));
+          obServers.add(Utils.getServer(srv, os, new HashMap<String, String>()));
         }
       }
     } catch (Exception e) {
@@ -885,7 +876,7 @@ public class OpenStack4JDriver extends VimDriver {
       log.error("Error rebuilding image: " + response.getFault());
       throw new VimDriverException("Error rebuilding image: " + response.getFault());
     }
-    return Utils.getServer(os.compute().servers().get(serverId));
+    return Utils.getServer(os.compute().servers().get(serverId), os, new HashMap<String, String>());
   }
 
   @Override
@@ -1078,7 +1069,8 @@ public class OpenStack4JDriver extends VimDriver {
           e.printStackTrace();
         }
         server4j = getServerById(os, server.getExtId());
-        server = Utils.getServer(server4j);
+        Map<String, String> portNamesAndInterfaceIds = Utils.getPortNamesAndInterfaceIds(networks);
+        server = Utils.getServer(server4j, os, portNamesAndInterfaceIds);
         if (server.getStatus().equalsIgnoreCase("ACTIVE")) {
           log.info("Finished deployment of VM with hostname: " + instanceName);
           bootCompleted = true;
@@ -1102,7 +1094,8 @@ public class OpenStack4JDriver extends VimDriver {
       if (server != null) {
         exception.setServer(server);
       } else if (server4j != null) {
-        exception.setServer(Utils.getServer(server4j));
+        Map<String, String> portNamesAndInterfaceIds = Utils.getPortNamesAndInterfaceIds(networks);
+        exception.setServer(Utils.getServer(server4j, os, portNamesAndInterfaceIds));
       }
       throw exception;
     }
@@ -1278,7 +1271,7 @@ public class OpenStack4JDriver extends VimDriver {
       os.compute().floatingIps().allocateIP(poolName);
     }
 
-    PortListOptions options = PortListOptions.create().name(buildPortName(vnfdConnectionPoint));
+    PortListOptions options = PortListOptions.create().name(Utils.buildPortName(vnfdConnectionPoint));
     List<? extends Port> ports = os.networking().port().list(options);
     log.debug("List of ports is " + new GsonBuilder().setPrettyPrinting().create().toJson(ports));
 
@@ -1394,6 +1387,7 @@ public class OpenStack4JDriver extends VimDriver {
       throws VimDriverException {
     OpenstackVimInstance openstackVimInstance = (OpenstackVimInstance) vimInstance;
     OSClient os = this.authenticate(openstackVimInstance);
+
     /* I suppose that checking for the result waits also for the effectivness of the operation */
     if (Boolean.parseBoolean(properties.getProperty("deallocate-floating-ip", "true"))) {
       log.info("Deallocating floating IP for VM with external id " + id);
