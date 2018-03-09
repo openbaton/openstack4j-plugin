@@ -216,6 +216,43 @@ public class OpenStack4JDriver extends VimDriver {
     }
   }
 
+  private void checkImageStatus(
+      OSClient os, OpenstackVimInstance openstackVimInstance, String imageId, String imageName)
+      throws VimException {
+
+    log.debug("Retrieved imageId(" + imageId + ") from image with name " + imageName);
+    org.openstack4j.model.image.Image imageFromVim = os.images().get(imageId);
+    log.trace(
+        "Retrieved image object from OpenStack: "
+            + new GsonBuilder().setPrettyPrinting().create().toJson(imageFromVim));
+    if (imageFromVim == null) {
+      throw new VimException(
+          "Not found image (name: " + imageName + ") on PoP " + openstackVimInstance.getName());
+    }
+    //GlanceV2 attempt
+    else if (imageFromVim.getId() == null) {
+      //When glanceV2 is exposed but you do a request to glanceV1 you get an ImageV1 object with all attributes equals
+      //to null and status UNRECOGNIZED, hence we try to make a request to glanceV2
+      org.openstack4j.model.image.v2.Image imageV2FromVim = os.imagesV2().get(imageId);
+      log.trace(
+          "Retrieved imageV2 object from OpenStack: "
+              + new GsonBuilder().setPrettyPrinting().create().toJson(imageV2FromVim));
+      if (imageV2FromVim == null) {
+        throw new VimException(
+            "Not found image (name: " + imageName + ") on PoP " + openstackVimInstance.getName());
+      } else if (imageV2FromVim.getStatus() == null
+          || imageV2FromVim.getStatus()
+              != (org.openstack4j.model.image.v2.Image.ImageStatus.ACTIVE)) {
+        throw new VimException(
+            "Image (name: " + imageName + ") is not yet in active. Try again later...");
+      }
+    } else if (imageFromVim.getStatus() == null
+        || imageFromVim.getStatus() != (org.openstack4j.model.image.Image.Status.ACTIVE)) {
+      throw new VimException(
+          "Image (name: " + imageName + ") is not yet in active. Try again later...");
+    }
+  }
+
   private Server launchInstance(
       OSClient os,
       OpenstackVimInstance openstackVimInstance,
@@ -234,19 +271,9 @@ public class OpenStack4JDriver extends VimDriver {
       vnfdcps.sort(Comparator.comparing(VNFDConnectionPoint::getInterfaceId));
 
       String imageId = getImageIdFromName(openstackVimInstance, image);
-      log.debug("Retrieved imageId(" + imageId + ") from image with name " + image);
-      org.openstack4j.model.image.Image imageFromVim = os.images().get(imageId);
-      log.trace(
-          "Retrieved image object from OpenStack: "
-              + new GsonBuilder().setPrettyPrinting().create().toJson(imageFromVim));
-      if (imageFromVim == null) {
-        throw new VimException(
-            "Not found image (name: " + image + ") on PoP " + openstackVimInstance.getName());
-      } else if (imageFromVim.getStatus() == null
-          || imageFromVim.getStatus() != (org.openstack4j.model.image.Image.Status.ACTIVE)) {
-        throw new VimException(
-            "Image (name: " + image + ") is not yet in active. Try again later...");
-      }
+
+      checkImageStatus(os, openstackVimInstance, imageId, image);
+
       Flavor flavor4j = getFlavorFromName(openstackVimInstance, flavor);
       flavor = flavor4j.getId();
       Optional<? extends AvailabilityZone> availabilityZone = getZone(os, openstackVimInstance);
