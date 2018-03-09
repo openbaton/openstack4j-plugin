@@ -477,7 +477,7 @@ public class OpenStack4JDriver extends VimDriver {
         .network()
         .list()
         .stream()
-        .filter(n -> n.getName().equals(name) && n.getTenantId().equals(tenantId))
+        .filter(n -> n.getName().equals(name) && (n.getTenantId().equals(tenantId) || n.isShared()))
         .findFirst();
   }
 
