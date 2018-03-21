@@ -95,6 +95,7 @@ import org.openstack4j.model.network.builder.PortBuilder;
 import org.openstack4j.model.network.builder.SubnetBuilder;
 import org.openstack4j.model.network.options.PortListOptions;
 import org.openstack4j.openstack.OSFactory;
+import org.openstack4j.openstack.networking.domain.NeutronFloatingIP;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -626,25 +627,6 @@ public class OpenStack4JDriver extends VimDriver {
     return listFloatingIps(os, tenantId, internalNetworkName, externalNetworkId);
   }
 
-  //  private List<NetFloatingIP> listFloatingIps(
-  //      OSClient os, String tenantId, String internalNetworkName) {
-  //    List<NetFloatingIP> res = new ArrayList<>();
-  //    List<? extends NetFloatingIP> floatingIPs = os.networking().floatingip().list();
-  //    log.trace(
-  //        "Retrieved floating IP list: "
-  //            + new GsonBuilder().setPrettyPrinting().create().toJson(floatingIPs));
-  //
-  //   for (NetFloatingIP floatingIP : floatingIPs) {
-  //     if (floatingIP.getTenantId().equals(tenantId)
-  //             && (floatingIP.getFixedIpAddress() == null
-  //                 || floatingIP.getFixedIpAddress().equals(""))
-  //         || internalNetworkName.equals("")) {
-  //       res.add(floatingIP);
-  //      }
-  //    }
-  //   return res;
-  // }
-
   private List<NetFloatingIP> listFloatingIps(
       OSClient os, String tenantId, String internalNetworkName, String externalNetworkId) {
     List<NetFloatingIP> res = new ArrayList<>();
@@ -1145,7 +1127,7 @@ public class OpenStack4JDriver extends VimDriver {
       Set<VNFDConnectionPoint> networks,
       Server server,
       org.openstack4j.model.compute.Server server4j)
-      throws VimDriverException, UnknownHostException {
+      throws Exception {
     if (server.getFloatingIps() == null) {
       server.setFloatingIps(new HashMap<>());
     }
@@ -1250,13 +1232,12 @@ public class OpenStack4JDriver extends VimDriver {
       org.openstack4j.model.compute.Server server4j,
       VNFDConnectionPoint vnfdConnectionPoint,
       OpenstackVimInstance openstackVimInstance)
-      throws VimDriverException {
+      throws Exception {
     String poolName = "";
     String extNetworkId = "";
 
     // allocate another floating ip if needed
     try {
-
       if (vnfdConnectionPoint.getChosenPool() != null
           && !vnfdConnectionPoint.getChosenPool().equals("")) {
         poolName = vnfdConnectionPoint.getChosenPool();
@@ -1357,17 +1338,42 @@ public class OpenStack4JDriver extends VimDriver {
       String tenantId,
       String internalNetworkName,
       OpenstackVimInstance vimInstance)
-      throws VimDriverException {
+      throws Exception {
     if (fipValue.trim().equalsIgnoreCase("random") || fipValue.trim().equals("")) {
       return listFloatingIps(os, tenantId, internalNetworkName, vimInstance).get(0);
     }
-    return os.networking()
-        .floatingip()
-        .list()
-        .stream()
-        .filter(floatingIP -> floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue))
-        .findFirst()
-        .orElseThrow(() -> new VimDriverException("Floating ip " + fipValue + " not found"));
+
+    List<? extends NetFloatingIP> netFloatingIPS = os.networking().floatingip().list();
+    for (NetFloatingIP fip : netFloatingIPS) {
+      if (fip.getFloatingIpAddress().equals(fipValue)
+          && fip.getFixedIpAddress().equals("")
+          && fip.getTenantId().equals(tenantId)) {
+        return fip;
+      }
+    }
+
+    this.log.info(String.format("Floating ip %s not allocated, try to allocate", fipValue));
+
+    NeutronFloatingIP floatingIp = new NeutronFloatingIP();
+    floatingIp.setTenantId(tenantId);
+    floatingIp.setFloatingIpAddress(fipValue);
+    floatingIp.setFloatingNetworkId(
+        getExternalNetworkId(os, tenantId, internalNetworkName, vimInstance));
+    return os.networking().floatingip().create(floatingIp);
+
+    //    throw new VimDriverException("Floating ip " + fipValue + " not found");
+
+    //    return os.networking()
+    //        .floatingip()
+    //        .list()
+    //        .stream()
+    //        .filter(
+    //            floatingIP -> {
+    //              this.log.debug(String.format("Checking fip %s, fixed ip: %s", floatingIP.getFloatingIpAddress(), floatingIP.getFixedIpAddress()));
+    //              return floatingIP.getFloatingIpAddress().equalsIgnoreCase(fipValue);
+    //            })
+    //        .findFirst()
+    //        .orElseThrow(() -> new VimDriverException("Floating ip " + fipValue + " not found"));
   }
 
   @Override
@@ -1447,7 +1453,7 @@ public class OpenStack4JDriver extends VimDriver {
                                             "",
                                             openstackVimInstance)
                                         .getId());
-                          } catch (VimDriverException e) {
+                          } catch (Exception e) {
                             e.printStackTrace();
                           }
                         }
