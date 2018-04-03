@@ -330,7 +330,6 @@ public class OpenStack4JDriver extends VimDriver {
         PortBuilder portBuilder = null;
         if (vnfdConnectionPoint.getFixedIp() != null
             && !vnfdConnectionPoint.getFixedIp().equals("")) {
-          sc.addNetwork(openstackNetId, vnfdConnectionPoint.getFixedIp());
 
           // get the subnet associated with the network
           List<String> subnets;
