@@ -1345,7 +1345,7 @@ public class OpenStack4JDriver extends VimDriver {
     List<? extends NetFloatingIP> netFloatingIPS = os.networking().floatingip().list();
     for (NetFloatingIP fip : netFloatingIPS) {
       if (fip.getFloatingIpAddress().equals(fipValue)
-          && fip.getFixedIpAddress().equals("")
+          && (null == fip.getFixedIpAddress() || fip.getFixedIpAddress().equals(""))
           && fip.getTenantId().equals(tenantId)) {
         return fip;
       }
