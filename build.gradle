@@ -42,14 +42,6 @@ apply from: 'gradle/gradle/git.helpers.gradle'
  * Project settings
  */
 project.ext {
-    //------------------------------------------------//
-    /**
-     * Spring Related Variables
-     */
-    springVersion = '4.2.0.RELEASE'
-    springBootVersion = '1.2.5.RELEASE'
-    //------------------------------------------------//    
-    //------------------------------------------------//
     /**
      * Application Related Version
      */
