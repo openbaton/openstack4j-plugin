@@ -19,14 +19,15 @@ package org.openbaton.drivers.openstack4j;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.UnknownHostException;
+import java.security.KeyStore;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -45,6 +46,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.net.util.SubnetUtils;
 import org.openbaton.catalogue.keys.PopKeypair;
@@ -66,7 +69,6 @@ import org.openbaton.plugin.PluginStarter;
 import org.openbaton.vim.drivers.interfaces.VimDriver;
 import org.openstack4j.api.Builders;
 import org.openstack4j.api.OSClient;
-import org.openstack4j.api.exceptions.AuthenticationException;
 import org.openstack4j.core.transport.Config;
 import org.openstack4j.model.common.ActionResponse;
 import org.openstack4j.model.common.Identifier;
@@ -123,6 +125,56 @@ public class OpenStack4JDriver extends VimDriver {
     cfg =
         cfg.withConnectionTimeout(
             Integer.parseInt(properties.getProperty("connection-timeout", "10000")));
+
+    // Add the certificate given in the VIM to the keystore used by the OSClient
+    if (vimInstance.getOpenstackSslCertificate() != null
+        && !vimInstance.getOpenstackSslCertificate().equals("")) {
+      log.debug("Certificate is provided in VIM " + vimInstance.getName());
+      InputStream certificateInputStream;
+      try {
+        certificateInputStream =
+            new ByteArrayInputStream(vimInstance.getOpenstackSslCertificate().getBytes());
+      } catch (Exception e) {
+        log.error("Not able to generate InputStream from provided certificate field.");
+        throw new VimDriverException(
+            "Not able to generate InputStream from provided certificate field.", e);
+      }
+      try {
+        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+        log.debug("Try to generate certificate from InputStream.");
+        X509Certificate cert = (X509Certificate) cf.generateCertificate(certificateInputStream);
+        TrustManagerFactory tmf = TrustManagerFactory.getInstance("X509");
+        KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keyStore.load(null);
+        String alias = cert.getSubjectX500Principal().getName();
+        log.debug("Adding entry for certificate with alias " + alias + " to the KeyStore.");
+        keyStore.setCertificateEntry(alias, cert);
+        tmf.init(keyStore);
+        SSLContext sslContext = SSLContext.getInstance("TLS");
+        sslContext.init(null, tmf.getTrustManagers(), null);
+        cfg.withSSLContext(sslContext);
+        log.debug("Added SSLContext with the OpenStack certificate to the OSClient configuration.");
+      } catch (Exception e) {
+        log.error(
+            "Exception while adding the OpenStack SSL certificate in the OpenStack VIM "
+                + vimInstance.getName()
+                + "to the Java Key Store.");
+        throw new VimDriverException(
+            "Exception while adding the OpenStack SSL certificate in the OpenStack VIM "
+                + vimInstance.getName()
+                + " to the Java Key Store.",
+            e);
+      } finally {
+        try {
+          certificateInputStream.close();
+        } catch (IOException e) {
+        }
+      }
+    }
+
+    if (Boolean.parseBoolean(properties.getProperty("disable-ssl-verification", "true")))
+      cfg.withSSLVerificationDisabled();
+
     try {
       if (isV3API(vimInstance)) {
 
@@ -189,8 +241,12 @@ public class OpenStack4JDriver extends VimDriver {
           }
         }
       }
-    } catch (AuthenticationException e) {
-      throw new VimDriverException(e.getMessage(), e);
+    } catch (Exception e) {
+      throw new VimDriverException(
+          "Exception while authenticating to OpenStack: '"
+              + e.getMessage()
+              + "'. Please check VIM credentials and potentially used certificates.",
+          e);
     }
 
     return os;
@@ -1013,7 +1069,8 @@ public class OpenStack4JDriver extends VimDriver {
     }
     Optional<Exception> exception = Arrays.stream(e).filter(Objects::nonNull).findAny();
     if (exception.isPresent()) {
-      throw new VimDriverException("Error refreshing vim", exception.get());
+      throw new VimDriverException(
+          "Error refreshing vim: " + exception.get().getMessage(), exception.get());
     }
     return openstackVimInstance;
   }
