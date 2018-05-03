@@ -130,7 +130,7 @@ public class OpenStack4JDriver extends VimDriver {
     if (vimInstance.getOpenstackSslCertificate() != null
         && !vimInstance.getOpenstackSslCertificate().equals("")) {
       log.debug("Certificate is provided in VIM " + vimInstance.getName());
-      InputStream certificateInputStream = null;
+      InputStream certificateInputStream;
       try {
         certificateInputStream =
             new ByteArrayInputStream(vimInstance.getOpenstackSslCertificate().getBytes());
@@ -171,6 +171,9 @@ public class OpenStack4JDriver extends VimDriver {
         }
       }
     }
+
+    if (Boolean.parseBoolean(properties.getProperty("disable-ssl-verification", "true")))
+      cfg.withSSLVerificationDisabled();
 
     try {
       if (isV3API(vimInstance)) {
