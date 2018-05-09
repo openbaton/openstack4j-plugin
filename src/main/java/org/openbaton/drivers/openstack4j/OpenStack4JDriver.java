@@ -276,7 +276,6 @@ public class OpenStack4JDriver extends VimDriver {
   private void checkImageStatus(
       OSClient os, OpenstackVimInstance openstackVimInstance, String imageId, String imageName)
       throws VimException {
-
     log.debug("Retrieved imageId(" + imageId + ") from image with name " + imageName);
     org.openstack4j.model.image.Image imageFromVim = os.images().get(imageId);
     log.trace(
@@ -300,13 +299,21 @@ public class OpenStack4JDriver extends VimDriver {
       } else if (imageV2FromVim.getStatus() == null
           || imageV2FromVim.getStatus()
               != (org.openstack4j.model.image.v2.Image.ImageStatus.ACTIVE)) {
-        throw new VimException(
-            "Image (name: " + imageName + ") is not yet in active. Try again later...");
+        if (Boolean.parseBoolean(properties.getProperty("enable-image-status-check", "false"))) {
+          throw new VimException(
+              "Image (name: " + imageName + ") is not yet in active. Try again later...");
+        } else {
+          log.debug("Disabled check for image status");
+        }
       }
     } else if (imageFromVim.getStatus() == null
         || imageFromVim.getStatus() != (org.openstack4j.model.image.Image.Status.ACTIVE)) {
-      throw new VimException(
-          "Image (name: " + imageName + ") is not yet in active. Try again later...");
+      if (Boolean.parseBoolean(properties.getProperty("enable-image-status-check", "false"))) {
+        throw new VimException(
+            "Image (name: " + imageName + ") is not yet in active. Try again later...");
+      } else {
+        log.debug("Disabled check for image status");
+      }
     }
   }
 
