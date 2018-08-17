@@ -189,7 +189,15 @@ public class OpenStack4JDriver extends VimDriver {
                 + domain.getId()
                 + " and project id "
                 + project.getId());
-        log.debug("authUrl: "+vimInstance.getAuthUrl()+" username: "+vimInstance.getUsername()+" pass: "+vimInstance.getPassword() + " cfg: "+cfg);
+        log.debug(
+            "authUrl: "
+                + vimInstance.getAuthUrl()
+                + " username: "
+                + vimInstance.getUsername()
+                + " pass: "
+                + vimInstance.getPassword()
+                + " cfg: "
+                + cfg);
 
         os =
             OSFactory.builderV3()
