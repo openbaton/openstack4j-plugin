@@ -38,13 +38,7 @@ apply from: 'gradle/gradle/nexus.upload.plugin.gradle'
 apply from: 'gradle/gradle/command.line.helper.gradle'
 apply from: 'gradle/gradle/git.helpers.gradle'
 
-/**
- * Project settings
- */
 project.ext {
-    /**
-     * Application Related Version
-     */
     applicationVersion = version
 
     applicationRelease = isApplicationRelease()
@@ -53,13 +47,9 @@ project.ext {
 
     applicationVersionSnapshot = (!applicationRelease) ? ".${asUTC(applicationDate, 'yyyyMMdd')}.git${applicationRevision}" : ""
     applicationVersionFull = "${applicationVersion}${applicationVersionSnapshot}"
-    //------------------------------------------------//
-    //------------------------------------------------//
-    /**
-     * gradle Related Vars
-     */
+    
     mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
-    obVersion = '6.0.0-RC1'
+    openbatonVersion='6.0.0'
     //------------------------------------------------//
 }
 
@@ -81,7 +71,7 @@ dependencies {
 
 
 
-    compile 'org.openbaton:plugin-sdk:' + obVersion
+    compile 'org.openbaton:plugin-sdk:' + openbatonVersion
 
     compile group: 'org.pacesys', name: 'openstack4j-core', version: '3.1.0'
     compile group: 'org.pacesys.openstack4j.connectors', name: 'openstack4j-resteasy', version: '3.1.0'
