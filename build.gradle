@@ -49,7 +49,7 @@ project.ext {
     applicationVersionFull = "${applicationVersion}${applicationVersionSnapshot}"
     
     mainClass = 'org.openbaton.drivers.openstack4j.OpenStack4JDriver'
-    openbatonVersion='6.0.0'
+    openbatonVersion='6.0.1-SNAPSHOT'
     //------------------------------------------------//
 }
 
